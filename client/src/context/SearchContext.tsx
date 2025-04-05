@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-import { SearchParams } from "@/utils/types";
+import { SearchParams } from "../utils/types";
 
 interface SearchContextProps {
   searchParams: SearchParams;

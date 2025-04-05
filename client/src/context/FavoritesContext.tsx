@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
-import { FavoriteProduct, Product } from "@/utils/types";
-import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "../lib/queryClient";
+import { queryClient } from "../lib/queryClient";
+import { FavoriteProduct, Product } from "../utils/types";
+import { useToast } from "../hooks/use-toast";
 
 interface FavoritesContextProps {
   favorites: FavoriteProduct[];
@@ -50,7 +50,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (favoriteProducts.length > 0) {
       // Create favorite objects from the products
-      const favs = favoriteProducts.map(product => ({
+      const favs = favoriteProducts.map((product, index) => ({
+        id: index + 1, // Add temporary ids for client-side tracking
         userId,
         productId: product.id,
         platform: product.platform,

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { SearchParams, Product } from "@/utils/types";
+import { apiRequest } from "../lib/queryClient";
+import { SearchParams, Product } from "../../../shared/schema";
 
 interface SearchResults {
   products: Product[];

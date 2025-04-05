@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearch } from "@/context/SearchContext";
+import { useSearch } from "../context/SearchContext";
 
 // More reliable logo URLs with better quality
 const PLATFORMS = [
@@ -37,7 +37,7 @@ const PLATFORMS = [
 
 export function PlatformPills() {
   const { searchParams, updateSearchParams } = useSearch();
-  const activePlatforms = searchParams.platforms || PLATFORMS.map(p => p.id);
+  const activePlatforms = searchParams.platforms || PLATFORMS.map((p: {id: string}) => p.id);
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   
   const togglePlatform = (platformId: string) => {
@@ -46,7 +46,7 @@ export function PlatformPills() {
     if (activePlatforms.includes(platformId)) {
       // Don't allow removing all platforms
       if (activePlatforms.length === 1) return;
-      newPlatforms = activePlatforms.filter(p => p !== platformId);
+      newPlatforms = activePlatforms.filter((p: string) => p !== platformId);
     } else {
       newPlatforms = [...activePlatforms, platformId];
     }

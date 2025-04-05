@@ -6,7 +6,7 @@ import {
   insertFavoriteProductSchema, 
   insertPriceAlertSchema,
   searchParamsSchema 
-} from "@shared/schema";
+} from "../shared/schema";
 import { productService } from "./services/productService";
 import { ZodError } from "zod";
 
