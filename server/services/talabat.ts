@@ -221,9 +221,8 @@ export class TalabatService {
               price,
               originalPrice,
               discount,
-              image:
-                image ||
-                `https://via.placeholder.com/300x300?text=${encodeURIComponent(title)}`,
+              image: image || 
+                "https://images.deliveryhero.io/image/talabat/Menuitems/no_image_available.jpg",
               url,
               platform: "talabat",
               rating,
@@ -441,9 +440,8 @@ export class TalabatService {
           price,
           originalPrice,
           discount,
-          image:
-            image ||
-            `https://via.placeholder.com/300x300?text=${encodeURIComponent(title)}`,
+          image: image || 
+            "https://images.deliveryhero.io/image/talabat/Menuitems/no_image_available.jpg",
           url: `${this.baseUrl}/egypt/grocery/item/${productCode}`,
           platform: "talabat",
           rating,
@@ -558,74 +556,5 @@ export class TalabatService {
     }
   }
 
-  /**
-   * Helper method to generate mock products for testing/fallback
-   */
-  private generateMockProducts(query: string, count: number): Product[] {
-    const products: Product[] = [];
 
-    for (let i = 0; i < count; i++) {
-      const basePrice = 105 + Math.floor(Math.random() * 190);
-      const discountPercent = Math.floor(Math.random() * 15);
-      const originalPrice = (basePrice * (100 + discountPercent)) / 100;
-
-      const product: Product = {
-        id: `talabat-${Date.now()}-${i}`,
-        title: `${query} - Talabat ${i + 1}`,
-        price: basePrice,
-        originalPrice: Math.random() > 0.5 ? originalPrice : undefined,
-        discount: Math.random() > 0.5 ? discountPercent : undefined,
-        image: `https://via.placeholder.com/300x300?text=Talabat+${query.replace(/\s+/g, "+")}`,
-        url: `https://www.talabat.com/egypt/grocery/item-${i}${Date.now().toString().substring(0, 6)}`,
-        platform: "talabat",
-        rating: 3.5 + Math.random() * 1.5,
-        reviewCount: Math.floor(Math.random() * 60),
-        description: `This is a ${query} product from Talabat Egypt. High quality and fast delivery.`,
-        isPromotional: Math.random() > 0.7,
-        isFreeDelivery: Math.random() > 0.2,
-        brand: "Talabat",
-        specs: [
-          { key: "Weight", value: "1kg" },
-          { key: "Dimensions", value: "10x10x10 cm" },
-        ],
-      };
-
-      products.push(product);
-    }
-
-    return products;
-  }
-
-  /**
-   * Generate a mock product for a specific ID (fallback)
-   */
-  private generateMockProduct(productId: string): Product {
-    const basePrice = 105 + Math.floor(Math.random() * 190);
-    const discountPercent = Math.floor(Math.random() * 15);
-    const originalPrice = (basePrice * (100 + discountPercent)) / 100;
-
-    return {
-      id: `talabat-${productId}`,
-      title: `Talabat Product ${productId.substring(0, 8)}`,
-      price: basePrice,
-      originalPrice: Math.random() > 0.5 ? originalPrice : undefined,
-      discount: Math.random() > 0.5 ? discountPercent : undefined,
-      image: `https://via.placeholder.com/500x500?text=Talabat+Product`,
-      url: `https://www.talabat.com/egypt/grocery/item/${productId}`,
-      platform: "talabat",
-      rating: 3.5 + Math.random() * 1.5,
-      reviewCount: Math.floor(Math.random() * 60),
-      description:
-        "Detailed product description would go here. This includes all the specifications and features of the product.",
-      isPromotional: Math.random() > 0.7,
-      isFreeDelivery: Math.random() > 0.2,
-      brand: "Talabat",
-      specs: [
-        { key: "Weight", value: "1kg" },
-        { key: "Dimensions", value: "10x10x10 cm" },
-        { key: "Color", value: "Green" },
-        { key: "Material", value: "Glass" },
-      ],
-    };
-  }
 }

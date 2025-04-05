@@ -35,20 +35,99 @@ export class NoonService {
       // Encode query for Arabic support
       const encodedQuery = encodeURIComponent(query);
       
+      // First, try to use the Noon API directly
+      try {
+        // This API endpoint appears to be public and doesn't require authentication
+        const apiUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/autocomplete/?q=${encodedQuery}&lang=ar`;
+        const apiResponse = await axios.get(apiUrl, {
+          headers: {
+            ...this.headers,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            'Referer': 'https://www.noon.com/egypt-ar/',
+            'X-Locale': 'ar-eg',
+            'X-Platform': 'web'
+          },
+          timeout: 10000
+        });
+        
+        if (apiResponse.status === 200 && apiResponse.data && apiResponse.data.hits) {
+          console.log(`Successfully used Noon API, found ${apiResponse.data.hits.length} products`);
+          return this.parseJsonSearchResults(apiResponse.data, query);
+        }
+      } catch (apiError) {
+        console.log('Noon API search failed, falling back to HTML scraping');
+      }
+      
+      // Next, try a different API endpoint that might work
+      try {
+        const searchApiUrl = `${this.baseUrl}/egypt-ar/nlpapi/suggestion?q=${encodedQuery}&lang=ar`;
+        const suggestResponse = await axios.get(searchApiUrl, {
+          headers: {
+            ...this.headers,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            'Referer': 'https://www.noon.com/egypt-ar/'
+          },
+          timeout: 10000
+        });
+        
+        if (suggestResponse.status === 200 && suggestResponse.data && suggestResponse.data.suggestions) {
+          console.log('Found suggestions from Noon API, trying first suggestion');
+          
+          // Use the first suggestion to get product results
+          if (suggestResponse.data.suggestions.length > 0) {
+            const suggestion = suggestResponse.data.suggestions[0].text;
+            const suggestApiUrl = `${this.baseUrl}/egypt-ar/catalog-api/v2/search/products?q=${encodeURIComponent(suggestion)}&lang=ar`;
+            
+            const productResponse = await axios.get(suggestApiUrl, {
+              headers: {
+                ...this.headers,
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+                'Referer': 'https://www.noon.com/egypt-ar/'
+              },
+              timeout: 10000
+            });
+            
+            if (productResponse.status === 200 && productResponse.data && productResponse.data.hits) {
+              console.log(`Successfully used Noon suggestion API, found ${productResponse.data.hits.length} products`);
+              return this.parseJsonSearchResults(productResponse.data, query);
+            }
+          }
+        }
+      } catch (suggestError) {
+        console.log('Noon suggestion API failed, continuing to HTML scraping');
+      }
+      
+      // If API methods fail, try standard HTML scraping
       // Try the direct search URL which returns HTML with embedded JSON data
       const directUrl = `${this.searchUrl}/?q=${encodedQuery}`;
       
       console.log(`Making request to Noon search URL: ${directUrl}`);
       
       try {
-        // Use standard browser-like headers
+        // Use enhanced browser-like headers that mimic a real browser more closely
         const response = await axios.get(directUrl, {
           headers: {
-            ...this.headers,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Referer': 'https://www.noon.com/egypt-ar/'
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Referer': 'https://www.noon.com/egypt-ar/',
+            'Sec-Ch-Ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'Priority': 'u=0, i'
           },
-          timeout: 15000 // Increase timeout for better reliability
+          timeout: 20000, // Longer timeout for HTML response
+          maxRedirects: 5
         });
         
         if (response.status === 200) {
@@ -59,75 +138,85 @@ export class NoonService {
             const html = response.data;
             console.log('Scanning Noon HTML for product data...');
             
-            // Log some debug info to see what we're working with
+            // Try to find either __NEXT_DATA__ or window.__INITIAL_DATA__
+            let dataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+            if (dataMatch && dataMatch[1]) {
+              console.log('Found __NEXT_DATA__ script');
+              try {
+                const jsonData = JSON.parse(dataMatch[1]);
+                
+                // Check various paths where products might be stored
+                if (jsonData.props?.pageProps?.searchResult?.hits) {
+                  console.log(`Found ${jsonData.props.pageProps.searchResult.hits.length} products in __NEXT_DATA__`);
+                  return this.parseJsonSearchResults(jsonData.props.pageProps.searchResult, query);
+                } else if (jsonData.props?.pageProps?.initialReduxState?.searchResult?.hits) {
+                  console.log(`Found ${jsonData.props.pageProps.initialReduxState.searchResult.hits.length} products in initialReduxState`);
+                  return this.parseJsonSearchResults(jsonData.props.pageProps.initialReduxState.searchResult, query);
+                } else if (jsonData.props?.pageProps?.catalog?.products) {
+                  console.log(`Found ${jsonData.props.pageProps.catalog.products.length} products in catalog`);
+                  return this.parseJsonSearchResults({hits: jsonData.props.pageProps.catalog.products}, query);
+                }
+              } catch (e) {
+                console.log('Failed to parse __NEXT_DATA__ JSON:', e);
+              }
+            }
+            
+            // Try window.__INITIAL_DATA__ if __NEXT_DATA__ fails
+            dataMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*({[\s\S]*?});/);
+            if (dataMatch && dataMatch[1]) {
+              console.log('Found window.__INITIAL_DATA__ script');
+              try {
+                const jsonData = JSON.parse(dataMatch[1]);
+                
+                if (jsonData.searchResult?.hits) {
+                  console.log(`Found ${jsonData.searchResult.hits.length} products in __INITIAL_DATA__`);
+                  return this.parseJsonSearchResults(jsonData.searchResult, query);
+                } else if (jsonData.catalog?.products) {
+                  console.log(`Found ${jsonData.catalog.products.length} products in catalog`);
+                  return this.parseJsonSearchResults({hits: jsonData.catalog.products}, query);
+                }
+              } catch (e) {
+                console.log('Failed to parse __INITIAL_DATA__ JSON:', e);
+              }
+            }
+            
+            // If both special scripts fail, try scanning all script tags
             const scriptTags = html.match(/<script[^>]*>([\s\S]*?)<\/script>/g) || [];
             console.log(`Found ${scriptTags.length} script tags in Noon response`);
             
-            // Try to find product data in any script tag
-            let foundProducts = false;
-            
-            // Look for product data in the HTML itself
-            if (html.includes('productTitle') || html.includes('product-title')) {
-              console.log('Found product title markers in HTML');
-            }
-            
-            // Try all possible script tags that might contain product data
             for (const scriptTag of scriptTags) {
               try {
-                if (scriptTag.includes('__NEXT_DATA__')) {
-                  const jsonContent = scriptTag.replace(/<script[^>]*>/, '').replace(/<\/script>/, '');
-                  const jsonData = JSON.parse(jsonContent);
+                if (scriptTag.includes('"products":') || 
+                    scriptTag.includes('"hits":') || 
+                    scriptTag.includes('"searchResult":')) {
                   
-                  console.log('Found __NEXT_DATA__ script, checking for search results...');
+                  console.log('Found potential product data script');
                   
-                  // Log the structure to debug
-                  if (jsonData.props && jsonData.props.pageProps) {
-                    console.log('Page props keys:', Object.keys(jsonData.props.pageProps));
+                  // Try to extract JSON from the script
+                  const jsonMatch = scriptTag.match(/({[\s\S]*})/);
+                  if (jsonMatch) {
+                    const jsonData = JSON.parse(jsonMatch[1]);
                     
-                    if (jsonData.props.pageProps.searchResult) {
-                      console.log('Search result keys:', Object.keys(jsonData.props.pageProps.searchResult));
-                      
-                      if (jsonData.props.pageProps.searchResult.hits) {
-                        console.log(`Found ${jsonData.props.pageProps.searchResult.hits.length} products in JSON data`);
-                        foundProducts = true;
-                        return this.parseJsonSearchResults(jsonData.props.pageProps.searchResult, query);
-                      }
-                    }
-                    
-                    // Try alternative paths in the JSON structure
-                    if (jsonData.props.pageProps.initialReduxState) {
-                      console.log('Found initialReduxState, checking for search results...');
-                      
-                      if (jsonData.props.pageProps.initialReduxState.searchResult) {
-                        console.log('Found searchResult in initialReduxState');
-                        const searchResult = jsonData.props.pageProps.initialReduxState.searchResult;
-                        
-                        if (searchResult.hits || searchResult.products) {
-                          const hits = searchResult.hits || searchResult.products;
-                          console.log(`Found ${hits.length} products in initialReduxState`);
-                          foundProducts = true;
-                          return this.parseJsonSearchResults({hits}, query);
-                        }
-                      }
+                    if (jsonData.hits && Array.isArray(jsonData.hits)) {
+                      console.log(`Found ${jsonData.hits.length} products in script tag JSON`);
+                      return this.parseJsonSearchResults(jsonData, query);
+                    } else if (jsonData.products && Array.isArray(jsonData.products)) {
+                      console.log(`Found ${jsonData.products.length} products in script tag JSON`);
+                      return this.parseJsonSearchResults({hits: jsonData.products}, query);
+                    } else if (jsonData.searchResult?.hits) {
+                      console.log(`Found ${jsonData.searchResult.hits.length} products in searchResult`);
+                      return this.parseJsonSearchResults(jsonData.searchResult, query);
                     }
                   }
-                }
-                // Check for other JSON data in script tags
-                else if (scriptTag.includes('window.__INITIAL_DATA__') || 
-                        scriptTag.includes('products') || 
-                        scriptTag.includes('searchResults')) {
-                  console.log('Found potential product data script');
                 }
               } catch (e) {
                 // Continue to next script tag
               }
             }
             
-            if (!foundProducts) {
-              console.log('Could not extract product data from scripts, falling back to HTML parsing');
-            }
+            console.log('Could not extract product data from scripts, falling back to HTML parsing');
           } catch (jsonError) {
-            console.log('Failed to extract JSON data from HTML, falling back to HTML parsing', jsonError);
+            console.log('Failed to extract JSON data from HTML, falling back to HTML parsing');
           }
           
           // If JSON extraction fails, parse the HTML directly
@@ -141,7 +230,7 @@ export class NoonService {
       return [];
     } catch (error) {
       console.error('Error searching Noon Egypt:', error);
-      return []; // Return empty array instead of mock data
+      return []; // Return empty array
     }
   }
   
@@ -404,6 +493,11 @@ export class NoonService {
       
       console.log('Parsing Noon HTML search results...');
       
+      // Try to identify the current HTML structure
+      // First check for any product links that might contain paths to product pages
+      const productLinks = $('a[href*="/product/"]');
+      console.log(`Found ${productLinks.length} product links in HTML`);
+      
       // Log all possible product containers we find
       const productBlockCount = $('div[data-qa="product-block"]').length;
       const productCardCount = $('.product-card, .productCard, .product-item, [data-testid="product-card"]').length;
@@ -514,12 +608,106 @@ export class NoonService {
         $('.product-card, .productCard, .product-item, [data-testid="product-card"]').each((i, element) => parseProductElement(element));
       }
       
-      // If still no products, try looking for product grid items
-      if (products.length === 0) {
-        console.log('Trying to process products from grid items');
-        $('a[href*="product/"]').each((i, element) => {
-          const parent = $(element).parent().parent();
-          parseProductElement(parent);
+      // If still no products, process the product links directly
+      if (products.length === 0 && productLinks.length > 0) {
+        console.log('Processing Noon products directly from product links');
+        
+        productLinks.each((i, element) => {
+          if (products.length >= 20) return false; // Limit to 20 products
+          
+          try {
+            const href = $(element).attr('href') || '';
+            if (!href || !href.includes('/product/')) return;
+            
+            // Extract the product ID from the URL
+            const urlParts = href.split('/');
+            const productIndex = urlParts.indexOf('product');
+            const productId = productIndex >= 0 && productIndex < urlParts.length - 1 ? urlParts[productIndex + 1] : '';
+            
+            if (!productId) return;
+            
+            // Look for parent product container - could be 1-3 levels up
+            let parentElement = $(element).parent();
+            let containerFound = false;
+            let level = 0;
+            const maxLevels = 3;
+            
+            // Find appropriate container by moving up the DOM
+            while (level < maxLevels && !containerFound) {
+              // If we find a likely product container, use it
+              if (
+                parentElement.find('img').length > 0 ||
+                parentElement.find('.price').length > 0 ||
+                parentElement.find('[data-qa="price-wrapper"]').length > 0 ||
+                parentElement.attr('data-qa') === 'product-block'
+              ) {
+                containerFound = true;
+                break;
+              }
+              
+              // Move up one level
+              parentElement = parentElement.parent();
+              level++;
+            }
+            
+            // If we didn't find a container, use the original element's parent
+            const container = containerFound ? parentElement : $(element).parent();
+            
+            // Extract basic product info
+            let title = '';
+            
+            // Try to find title in container
+            const titleElement = container.find('[data-qa="product-name"], h3, h2, .title, .product-title');
+            if (titleElement.length) {
+              title = titleElement.text().trim();
+            } else {
+              // If not found, check the link text or title attribute
+              title = $(element).text().trim() || $(element).attr('title') || '';
+            }
+            
+            // If we still don't have a title, use a generic one with the product ID
+            if (!title) {
+              title = `Noon Product ${productId}`;
+            }
+            
+            // URL
+            const url = href.startsWith('http') ? href : this.baseUrl + href;
+            
+            // Look for price
+            let price = 0;
+            const priceElement = container.find('[data-qa="price-wrapper"] span, .price, .now-price, [data-testid="price"]');
+            if (priceElement.length) {
+              const priceText = priceElement.text().trim();
+              if (priceText) {
+                price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+              }
+            }
+            
+            // Look for image
+            let image = '';
+            const imgElement = container.find('img').first();
+            if (imgElement.length) {
+              image = imgElement.attr('src') || imgElement.attr('data-src') || '';
+            }
+            
+            // If no image found but we have a productId, construct a noon CDN URL
+            if (!image && productId) {
+              image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${productId}.jpg`;
+            }
+            
+            // Create the product
+            products.push({
+              id: `noon-${productId}`,
+              title,
+              price,
+              image,
+              url,
+              platform: 'noon',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing Noon product link:', e);
+          }
         });
       }
       
@@ -627,73 +815,5 @@ export class NoonService {
     }
   }
   
-  /**
-   * Helper method to generate mock products for testing/fallback
-   */
-  private generateMockProducts(query: string, count: number): Product[] {
-    const products: Product[] = [];
-    
-    for (let i = 0; i < count; i++) {
-      const basePrice = 90 + Math.floor(Math.random() * 220);
-      const discountPercent = Math.floor(Math.random() * 20);
-      const originalPrice = basePrice * (100 + discountPercent) / 100;
-      
-      const product: Product = {
-        id: `noon-${Date.now()}-${i}`,
-        title: `${query} - من نون`,
-        price: basePrice,
-        originalPrice: Math.random() > 0.5 ? originalPrice : undefined,
-        discount: Math.random() > 0.5 ? discountPercent : undefined,
-        image: `https://via.placeholder.com/300x300?text=Noon+${query.replace(/\s+/g, '+')}`,
-        url: `https://www.noon.com/egypt-en/p-${i}${Date.now().toString().substring(0, 6)}`,
-        platform: 'noon',
-        rating: 3.5 + Math.random() * 1.5,
-        reviewCount: Math.floor(Math.random() * 100),
-        description: `منتج ${query} من نون مصر. جودة عالية وسعر مناسب.`,
-        isPromotional: Math.random() > 0.7,
-        isFreeDelivery: Math.random() > 0.3,
-        brand: 'Noon',
-        specs: [
-          { key: 'الوزن', value: '1kg' },
-          { key: 'الأبعاد', value: '10x10x10 cm' }
-        ]
-      };
-      
-      products.push(product);
-    }
-    
-    return products;
-  }
-  
-  /**
-   * Generate a mock product for a specific ID (fallback)
-   */
-  private generateMockProduct(productId: string): Product {
-    const basePrice = 90 + Math.floor(Math.random() * 220);
-    const discountPercent = Math.floor(Math.random() * 20);
-    const originalPrice = basePrice * (100 + discountPercent) / 100;
-    
-    return {
-      id: `noon-${productId}`,
-      title: `منتج نون ${productId.substring(0, 8)}`,
-      price: basePrice,
-      originalPrice: Math.random() > 0.5 ? originalPrice : undefined,
-      discount: Math.random() > 0.5 ? discountPercent : undefined,
-      image: `https://via.placeholder.com/500x500?text=Noon+Product`,
-      url: `https://www.noon.com/egypt-ar/product/${productId}`,
-      platform: 'noon',
-      rating: 3.5 + Math.random() * 1.5,
-      reviewCount: Math.floor(Math.random() * 100),
-      description: 'وصف تفصيلي للمنتج هنا. يتضمن ذلك جميع المواصفات وميزات المنتج.',
-      isPromotional: Math.random() > 0.7,
-      isFreeDelivery: Math.random() > 0.3,
-      brand: 'Noon',
-      specs: [
-        { key: 'الوزن', value: '1kg' },
-        { key: 'الأبعاد', value: '10x10x10 cm' },
-        { key: 'اللون', value: 'أزرق' },
-        { key: 'المادة', value: 'بلاستيك' }
-      ]
-    };
-  }
+
 }

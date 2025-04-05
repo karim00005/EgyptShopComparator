@@ -90,10 +90,7 @@ export class CarrefourService {
     try {
       console.log(`Fetching Carrefour Egypt product details for: ${productId}`);
       
-      // Use fallback if needed for development/testing
-      if (process.env.USE_MOCK_DATA === 'true') {
-        return this.generateMockProduct(productId);
-      }
+
       
       // Extract the product code if it's a full URL
       const productCode = productId.includes('/product/') ? 
@@ -545,73 +542,5 @@ export class CarrefourService {
     }
   }
   
-  /**
-   * Helper method to generate mock products for testing/fallback
-   */
-  private generateMockProducts(query: string, count: number): Product[] {
-    const products: Product[] = [];
-    
-    for (let i = 0; i < count; i++) {
-      const basePrice = 95 + Math.floor(Math.random() * 210);
-      const discountPercent = Math.floor(Math.random() * 25);
-      const originalPrice = basePrice * (100 + discountPercent) / 100;
-      
-      const product: Product = {
-        id: `carrefour-${Date.now()}-${i}`,
-        title: `${query} - Carrefour ${i + 1}`,
-        price: basePrice,
-        originalPrice: originalPrice,
-        discount: discountPercent,
-        image: `https://via.placeholder.com/300x300?text=Carrefour+${query.replace(/\s+/g, '+')}`,
-        url: `https://www.carrefouregypt.com/mafegy/en/product-${i}${Date.now().toString().substring(0, 6)}`,
-        platform: 'carrefour',
-        rating: 3.0 + Math.random() * 2.0,
-        reviewCount: Math.floor(Math.random() * 80),
-        description: `This is a ${query} product from Carrefour Egypt. High quality and affordable.`,
-        isPromotional: Math.random() > 0.6,
-        isFreeDelivery: Math.random() > 0.7,
-        brand: 'Carrefour',
-        specs: [
-          { key: 'Weight', value: '1kg' },
-          { key: 'Dimensions', value: '10x10x10 cm' }
-        ]
-      };
-      
-      products.push(product);
-    }
-    
-    return products;
-  }
-  
-  /**
-   * Generate a mock product for a specific ID (fallback)
-   */
-  private generateMockProduct(productId: string): Product {
-    const basePrice = 95 + Math.floor(Math.random() * 210);
-    const discountPercent = Math.floor(Math.random() * 25);
-    const originalPrice = basePrice * (100 + discountPercent) / 100;
-    
-    return {
-      id: `carrefour-${productId}`,
-      title: `Carrefour Product ${productId.substring(0, 8)}`,
-      price: basePrice,
-      originalPrice: originalPrice,
-      discount: discountPercent,
-      image: `https://via.placeholder.com/500x500?text=Carrefour+Product`,
-      url: `https://www.carrefouregypt.com/mafegy/ar/product/${productId}`,
-      platform: 'carrefour',
-      rating: 3.0 + Math.random() * 2.0,
-      reviewCount: Math.floor(Math.random() * 80),
-      description: 'Detailed product description would go here. This includes all the specifications and features of the product.',
-      isPromotional: Math.random() > 0.6,
-      isFreeDelivery: Math.random() > 0.7,
-      brand: 'Carrefour',
-      specs: [
-        { key: 'Weight', value: '1kg' },
-        { key: 'Dimensions', value: '10x10x10 cm' },
-        { key: 'Color', value: 'Red' },
-        { key: 'Material', value: 'Metal' }
-      ]
-    };
-  }
+
 }
