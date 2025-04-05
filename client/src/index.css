@@ -8,10 +8,17 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased bg-background text-black;
+  }
+
+  /* Override text-white classes */
+  .text-white,
+  .text-white * {
+    color: black !important;
   }
 }
 
+/* Rest of the existing CSS remains unchanged */
 @keyframes shimmer {
   0% {
     background-position: -468px 0;
@@ -32,14 +39,12 @@
   animation-timing-function: linear;
 }
 
-/* Prevent layout shifts during loading */
 .transition-opacity {
   transition-property: opacity;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
-/* Improve loading states */
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
@@ -53,7 +58,6 @@
   }
 }
 
-/* Spinner animation */
 @keyframes spin {
   0% {
     transform: rotate(0deg);
@@ -67,12 +71,10 @@
   animation: spin 1s linear infinite;
 }
 
-/* Add some spacing between elements */
 .mt-8 {
   margin-top: 2rem;
 }
 
-/* Improve buttons */
 button:disabled {
   cursor: not-allowed;
   opacity: 0.7;

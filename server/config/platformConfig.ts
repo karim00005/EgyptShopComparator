@@ -86,7 +86,7 @@ export const platformConfigs: Record<string, PlatformConfig> = {
   talabat: {
     name: 'talabat',
     displayName: 'Talabat Egypt',
-    logo: 'https://play-lh.googleusercontent.com/KhGz6kt8AOi0vQSbH3cCH9jHQVw7oebQ9S9MUuKiLANhkdW6wfiHcl3uGVT4uoJR37wu',
+    logo: 'https://blog.talabat.com/wp-content/uploads/2020/07/cropped-Talabat-New-Brand-Icon-2-300x300.png',
     color: '#FF5A00',
     apiConfig: {
       baseUrl: 'https://www.talabat.com',

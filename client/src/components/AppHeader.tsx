@@ -9,32 +9,14 @@ export function AppHeader() {
   const [_, navigate] = useLocation();
   const { searchParams, updateSearchParams } = useSearch();
   const { language, setLanguage, t } = useLanguage();
-  const [scrolled, setScrolled] = useState(false);
   const isRTL = language === 'ar';
-  
-  // Add scroll effect for header
-  useEffect(() => {
-    const handleScroll = () => {
-      const offset = window.scrollY;
-      if (offset > 30) {
-        setScrolled(true);
-      } else {
-        setScrolled(false);
-      }
-    };
-    
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-  
+
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
   };
-  
+
   return (
-    <header dir={isRTL ? 'rtl' : 'ltr'} className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'shadow-lg' : 'shadow-md'}`}>
+    <header dir={isRTL ? 'rtl' : 'ltr'} className="relative">
       <div className="bg-primary-700 text-white py-3">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center">
@@ -87,8 +69,8 @@ export function AppHeader() {
         </div>
       </div>
       
-      <div dir={isRTL ? 'rtl' : 'ltr'} className={`bg-white py-4 transition-all duration-300 ${scrolled ? 'py-3' : ''}`}>
-        <div className="container mx-auto px-4">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md">
+        <div className="container mx-auto px-4 py-4">
           <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 ${isRTL ? 'md:space-x-reverse md:space-x-4' : 'md:space-x-4'}`}>
             <SearchBar />
             <FilterBar />

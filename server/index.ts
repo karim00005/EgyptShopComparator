@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -59,12 +61,30 @@ app.use((req, res, next) => {
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = 5000;
+  const port = 5000; 
+  const host = "127.0.0.1"; // Change host to IPv4 localhost
   server.listen({
     port,
-    host: "0.0.0.0",
+    host, // Use the host variable set to localhost
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
   });
 })();
+
+const startServer = async () => {
+  try {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    }).on('error', (e: any) => {
+      if (e.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is busy, trying ${Number(PORT) + 1}...`);
+        app.listen(Number(PORT) + 1);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+  }
+};
+
+startServer();
