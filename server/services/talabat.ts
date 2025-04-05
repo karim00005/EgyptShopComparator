@@ -32,16 +32,21 @@ export class TalabatService {
       console.log(`Searching Talabat Egypt for: ${query}`);
       
       // Prepare the search URL - first try API endpoint, then fallback to HTML
-      const apiSearchUrl = `${this.baseUrl}/api/catalog/search?q=${encodeURIComponent(query)}&country=eg&language=ar`;
+      // Based on actual API endpoint from curl examples
+      const apiSearchUrl = `${this.baseUrl}/nextApi/groceries/stores/0bbe2d06-bbf4-4992-b74f-d19304dd4fc8/products?countryId=9&query=${encodeURIComponent(query)}&limit=20&offset=0&isDarkstore=true&isMigrated=false`;
       const fallbackSearchUrl = `${this.searchUrl}?q=${encodeURIComponent(query)}`;
+      
+      console.log(`Making request to Talabat API URL: ${apiSearchUrl}`);
       
       try {
         // First try the API endpoint which returns JSON
         const apiResponse = await axios.get(apiSearchUrl, {
           headers: {
             ...this.headers,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Accept': 'application/json, text/plain, */*',
+            'appbrand': '1',
+            'sourceapp': 'web',
+            'x-device-source': '0'
           },
           timeout: this.timeout
         });

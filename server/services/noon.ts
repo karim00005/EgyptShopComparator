@@ -36,8 +36,11 @@ export class NoonService {
       const encodedQuery = encodeURIComponent(query);
       
       // First try the API endpoint to get JSON data
+      // Using the v3 search API endpoint based on actual requests
       const apiUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/?q=${encodedQuery}`;
       const fallbackUrl = `${this.searchUrl}/?q=${encodedQuery}`;
+      
+      console.log(`Making request to Noon API URL: ${apiUrl}`);
       
       try {
         // Add API specific headers for JSON response
@@ -45,7 +48,8 @@ export class NoonService {
           headers: {
             ...this.headers,
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Referer': 'https://www.noon.com/egypt-ar/'
           },
           timeout: this.timeout
         });

@@ -30,10 +30,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product search endpoint
   app.get("/api/products/search", async (req, res) => {
     try {
-      const query = req.query.q as string;
+      // Accept either 'q' or 'query' parameter for search
+      const query = (req.query.q || req.query.query) as string;
       if (!query) {
         return res.status(400).json({ message: "Search query is required" });
       }
+
+      console.log(`Searching for: "${query}"`);
 
       // Parse and validate search parameters
       const searchParams = searchParamsSchema.parse({

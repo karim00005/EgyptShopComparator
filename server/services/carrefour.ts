@@ -36,8 +36,16 @@ export class CarrefourService {
         return this.generateMockProducts(query, 8);
       }
       
-      // Encode query for Arabic support
-      const encodedQuery = encodeURIComponent(query);
+      // Encode query for Arabic support - using proper unicode escaping for Arabic
+      // Use %u0633%u0643%u0631 format for Arabic characters based on actual API requests
+      const encodedQuery = query.split('').map(char => {
+        const code = char.charCodeAt(0);
+        if (code > 127) {
+          return `%u${code.toString(16).padStart(4, '0')}`;
+        }
+        return encodeURIComponent(char);
+      }).join('');
+      
       const url = `${this.searchUrl}?keyword=${encodedQuery}`;
       
       console.log(`Making request to Carrefour URL: ${url}`);
