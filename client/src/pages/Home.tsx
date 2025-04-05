@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
 import { PaginationControls } from "@/components/PaginationControls";
@@ -12,9 +12,30 @@ export default function Home() {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [lastSearchQuery, setLastSearchQuery] = useState<string | null>(null);
+  const firstRenderRef = useRef(true);
   
   // Fetch products based on search params
   const { products, totalCount, isLoading, isError } = useProductSearch(searchParams);
+  
+  // Track the last search query to avoid UI flashing when search changes
+  useEffect(() => {
+    if (searchParams.query) {
+      setLastSearchQuery(searchParams.query);
+    }
+  }, [searchParams.query]);
+  
+  // Show loading toast only on first render with a query
+  useEffect(() => {
+    if (firstRenderRef.current && searchParams.query && isLoading) {
+      toast({
+        title: "Searching across platforms",
+        description: "This may take a few seconds as we gather the latest prices",
+        duration: 3000
+      });
+      firstRenderRef.current = false;
+    }
+  }, [isLoading, searchParams.query]);
   
   const handleCompareClick = (product: Product) => {
     setSelectedProduct(product);
@@ -27,10 +48,22 @@ export default function Home() {
     setTimeout(() => setSelectedProduct(null), 300);
   };
   
+  // Determine if we should show the no results message
+  const showNoResults = searchParams.query && 
+                        !isLoading && 
+                        products.length === 0 && 
+                        lastSearchQuery === searchParams.query;
+  
+  // Determine if we should show the welcome/empty state
+  const showWelcome = !searchParams.query && !isLoading;
+  
+  // Determine if we should show the results
+  const showResults = !isLoading && products.length > 0;
+  
   return (
     <main className="container mx-auto px-4 py-6">
-      {/* Search Results Summary */}
-      {searchParams.query && (
+      {/* Search Results Summary - only show when products are loaded */}
+      {showResults && searchParams.query && (
         <div className="mb-4 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-800">
             Results for "{searchParams.query}"
@@ -43,17 +76,23 @@ export default function Home() {
       
       {/* Loading State */}
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {Array(8).fill(0).map((_, i) => (
-            <div key={i} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
-              <div className="h-48 bg-gray-200 rounded mb-4 skeleton"></div>
-              <div className="h-6 bg-gray-200 rounded w-3/4 mb-2 skeleton"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-4 skeleton"></div>
-              <div className="h-8 bg-gray-200 rounded mb-2 skeleton"></div>
-              <div className="h-4 bg-gray-200 rounded w-full mb-2 skeleton"></div>
-              <div className="h-4 bg-gray-200 rounded w-4/5 skeleton"></div>
-            </div>
-          ))}
+        <div>
+          <div className="mb-6 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mb-2"></div>
+            <p className="text-gray-600">Searching across {searchParams.platforms?.length || 4} platforms...</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array(8).fill(0).map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+                <div className="h-48 bg-gray-200 rounded mb-4 skeleton"></div>
+                <div className="h-6 bg-gray-200 rounded w-3/4 mb-2 skeleton"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-4 skeleton"></div>
+                <div className="h-8 bg-gray-200 rounded mb-2 skeleton"></div>
+                <div className="h-4 bg-gray-200 rounded w-full mb-2 skeleton"></div>
+                <div className="h-4 bg-gray-200 rounded w-4/5 skeleton"></div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       
@@ -62,11 +101,17 @@ export default function Home() {
         <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-6">
           <h3 className="font-semibold">Error fetching products</h3>
           <p>Please try again later or refine your search query.</p>
+          <button 
+            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+            onClick={() => window.location.reload()}
+          >
+            Retry Search
+          </button>
         </div>
       )}
       
       {/* Empty State - No query */}
-      {!searchParams.query && !isLoading && (
+      {showWelcome && (
         <div className="text-center py-10">
           <div className="mb-4">
             <span className="material-icons text-primary-400 text-6xl">search</span>
@@ -79,7 +124,7 @@ export default function Home() {
       )}
       
       {/* Empty State - No results */}
-      {searchParams.query && !isLoading && products.length === 0 && (
+      {showNoResults && (
         <div className="text-center py-10">
           <div className="mb-4">
             <span className="material-icons text-gray-400 text-6xl">sentiment_dissatisfied</span>
@@ -101,7 +146,7 @@ export default function Home() {
       )}
       
       {/* Product Grid */}
-      {!isLoading && products.length > 0 && (
+      {showResults && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products.map((product) => (
             <ProductCard 
@@ -114,8 +159,10 @@ export default function Home() {
       )}
       
       {/* Pagination Controls */}
-      {!isLoading && totalCount > 0 && (
-        <PaginationControls totalItems={totalCount} />
+      {showResults && totalCount > 0 && (
+        <div className="mt-8">
+          <PaginationControls totalItems={totalCount} />
+        </div>
       )}
       
       {/* Product Detail Modal */}
