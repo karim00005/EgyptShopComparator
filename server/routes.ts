@@ -31,12 +31,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products/search", async (req, res) => {
     try {
       // Accept either 'q' or 'query' parameter for search
-      const query = (req.query.q || req.query.query) as string;
+      let query = (req.query.q || req.query.query) as string;
       if (!query) {
         return res.status(400).json({ message: "Search query is required" });
       }
+      
+      // Fix for Arabic character encoding when coming from URL
+      try {
+        // Handle URL encoded Arabic words
+        // If query already contains Arabic characters, this is a no-op
+        // If query is URL encoded, this properly converts to Arabic
+        if (query.includes('%')) {
+          query = decodeURIComponent(query);
+        }
+      } catch (decodeError) {
+        console.warn('Failed to decode query parameter:', decodeError);
+        // Continue with original query if decoding fails
+      }
 
-      console.log(`Searching for: "${query}"`);
+      console.log(`Searching for: "${query}" (decoded)`);
 
       // Parse and validate search parameters
       const searchParams = searchParamsSchema.parse({

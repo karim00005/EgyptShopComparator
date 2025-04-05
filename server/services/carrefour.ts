@@ -34,53 +34,116 @@ export class CarrefourService {
       // Encode query for Arabic support 
       const encodedQuery = encodeURIComponent(query);
       
-      // First, try with the direct API endpoint (per user's suggestion)
-      const directApiUrl = `https://www.carrefouregypt.com/mafegy/ar/v4/search?keyword=${encodedQuery}`;
+      // Create a list of products to return
+      let products: Product[] = [];
       
-      console.log(`Making request to Carrefour API URL: ${directApiUrl}`);
+      // Try various API endpoints until one works
+      
+      // 1. Try the search-results API endpoint first
+      const searchUrl = `https://www.carrefouregypt.com/api/v1/catalog/products/search-results?p=1&q=${encodedQuery}&lang=ar&displaySize=20&storeId=5`;
+      
+      console.log(`Making request to Carrefour search API URL: ${searchUrl}`);
       
       try {
         // Make the request with browser-like headers
-        const response = await axios.get(directApiUrl, {
+        const response = await axios.get(searchUrl, {
           headers: {
-            ...this.headers,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
             'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             'Referer': 'https://www.carrefouregypt.com/',
-            'sec-ch-ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1'
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive'
           },
-          timeout: 20000, // Increased timeout for reliability
+          timeout: 15000 // 15 second timeout
+        });
+        
+        if (response.status === 200 && response.data) {
+          console.log('Successfully got response from Carrefour search API');
+          console.log('Carrefour API data structure:', JSON.stringify(response.data).substring(0, 500));
+          
+          if (response.data.results && Array.isArray(response.data.results) && response.data.results.length > 0) {
+            console.log(`Found ${response.data.results.length} products in Carrefour API response`);
+            const apiProducts = this.processCarrefourApiResults(response.data.results);
+            if (apiProducts.length > 0) {
+              return apiProducts;
+            }
+          }
+        }
+      } catch (searchApiError) {
+        console.error('Error using Carrefour search API:', searchApiError);
+      }
+      
+      // 2. Try the category API as an alternative
+      const categoryUrl = `https://www.carrefouregypt.com/api/v1/catalog/categories/search-page?p=1&q=${encodedQuery}&lang=ar&displaySize=30&storeId=5`;
+      
+      console.log(`Making request to Carrefour category API URL: ${categoryUrl}`);
+      
+      try {
+        // Make the request with browser-like headers
+        const response = await axios.get(categoryUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Referer': 'https://www.carrefouregypt.com/',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive'
+          },
+          timeout: 15000 // 15 second timeout
+        });
+        
+        if (response.status === 200 && response.data) {
+          console.log('Successfully got response from Carrefour category API');
+          console.log('Carrefour category API data structure:', JSON.stringify(response.data).substring(0, 500));
+          
+          if (response.data.products && Array.isArray(response.data.products) && response.data.products.length > 0) {
+            console.log(`Found ${response.data.products.length} products in Carrefour category API response`);
+            const apiProducts = this.processCarrefourApiResults(response.data.products);
+            if (apiProducts.length > 0) {
+              return apiProducts;
+            }
+          }
+        }
+      } catch (categoryApiError) {
+        console.error('Error using Carrefour category API:', categoryApiError);
+      }
+      
+      // 3. If API approaches failed, fallback to HTML scraping
+      const htmlUrl = `https://www.carrefouregypt.com/mafegy/ar/v4/search?keyword=${encodedQuery}`;
+      
+      console.log(`Making request to Carrefour HTML URL: ${htmlUrl}`);
+      
+      try {
+        // Make the request with browser-like headers
+        const response = await axios.get(htmlUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Referer': 'https://www.carrefouregypt.com/',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+          },
+          timeout: 15000, // 15 second timeout
           maxContentLength: 10 * 1024 * 1024 // 10MB max response size
         });
         
         // Debug response status
-        console.log(`Carrefour response status: ${response.status}`);
-        console.log(`Carrefour response size: ${response.data ? (response.data.length || 0) : 0} characters`);
+        console.log(`Carrefour HTML response status: ${response.status}`);
+        console.log(`Carrefour HTML response size: ${response.data ? (response.data.length || 0) : 0} characters`);
         
         // If we got a response, parse it
         if (response.status === 200) {
-          // Look for product grid in response
-          if (response.data && response.data.includes('plp-products-grid')) {
-            console.log('Product grid found in Carrefour response');
-          } else {
-            console.log('Product grid NOT found in Carrefour response');
-          }
-          
           return this.parseSearchResults(response.data, query);
-        } else {
-          console.log(`Carrefour returned non-200 status code: ${response.status}`);
         }
-      } catch (requestError) {
-        console.error('Error making request to Carrefour:', requestError);
+      } catch (htmlError) {
+        console.error('Error making request to Carrefour HTML page:', htmlError);
       }
       
+      // If all approaches failed, return empty array
+      console.log('All approaches to fetch Carrefour products failed');
       return [];
     } catch (error: any) {
       console.error('Error searching Carrefour Egypt:', error);
@@ -88,8 +151,108 @@ export class CarrefourService {
         console.error(`Response status: ${error.response.status}`);
         console.error(`Response headers:`, error.response.headers);
       }
-      return []; // Return empty array instead of mock data
+      return []; // Return empty array
     }
+  }
+  
+  /**
+   * Process API results from Carrefour into Product objects
+   */
+  private processCarrefourApiResults(items: any[]): Product[] {
+    const products: Product[] = [];
+    
+    // Process each product
+    for (const item of items) {
+      if (products.length >= 20) break;
+      
+      try {
+        // Skip products without ID or name
+        if (!item.id || !item.name) continue;
+        
+        // Extract product info
+        const id = item.id;
+        const title = item.name;
+        
+        // Handle price formats
+        let price = 0;
+        if (typeof item.price === 'number') {
+          price = item.price;
+        } else if (item.price?.current) {
+          price = parseFloat(item.price.current);
+        } else if (item.price?.value) {
+          price = parseFloat(item.price.value);
+        }
+        
+        // Handle original price
+        let originalPrice: number | undefined;
+        if (item.price?.was && parseFloat(item.price.was) > price) {
+          originalPrice = parseFloat(item.price.was);
+        }
+        
+        // Calculate discount
+        let discount: number | undefined;
+        if (originalPrice && price && originalPrice > price) {
+          discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+        } else if (item.discount || item.discountPercentage) {
+          discount = parseFloat(item.discount || item.discountPercentage);
+        }
+        
+        // Handle images
+        let image = '';
+        if (item.image) {
+          image = typeof item.image === 'string' ? item.image : item.image.url || '';
+        } else if (item.images && item.images.length > 0) {
+          if (typeof item.images[0] === 'string') {
+            image = item.images[0];
+          } else {
+            image = item.images[0].url || '';
+          }
+        }
+        
+        // Ensure image URL is absolute
+        if (image && !image.startsWith('http')) {
+          image = `https://www.carrefouregypt.com${image.startsWith('/') ? '' : '/'}${image}`;
+        }
+        
+        // Fix image URL if needed for CDN
+        if (image.includes('cdn.mafrservices.com') && !image.includes('?im=')) {
+          image = `${image}?im=Resize=400`;
+        }
+        
+        // Create product URL
+        const url = `https://www.carrefouregypt.com/mafegy/ar/products/${id}`;
+        
+        // Extract additional info
+        const brand = item.brand || '';
+        const isFreeDelivery = !!item.freeDelivery || !!item.freeShipping;
+        const isPromotional = discount !== undefined && discount > 0;
+        
+        products.push({
+          id: `carrefour-${id}`,
+          title,
+          price,
+          originalPrice,
+          discount,
+          image,
+          url,
+          platform: 'carrefour',
+          brand,
+          isFreeDelivery,
+          isPromotional,
+          isBestPrice: false
+        });
+        
+      } catch (productError) {
+        console.error('Error processing Carrefour API product:', productError);
+      }
+    }
+    
+    // Return the products we found
+    if (products.length > 0) {
+      console.log(`Processed ${products.length} Carrefour products from API`);
+    }
+    
+    return products;
   }
   
   /**
@@ -99,44 +262,159 @@ export class CarrefourService {
     try {
       console.log(`Fetching Carrefour Egypt product details for: ${productId}`);
       
-
-      
       // Extract the product code if it's a full URL
       const productCode = productId.includes('/product/') ? 
         productId.split('/product/')[1].split('/')[0] : 
         productId;
       
-      const url = `${this.productUrl}/${productCode}`;
+      // Try the direct API first (more reliable)
+      const apiUrl = `https://www.carrefouregypt.com/api/v1/catalog/products/${productCode}?lang=ar&storeId=5`;
       
-      console.log(`Making request to Carrefour product URL: ${url}`);
-      console.log(`With headers:`, JSON.stringify(this.headers, null, 2));
+      console.log(`Making request to Carrefour product API URL: ${apiUrl}`);
       
-      // Make the request to Carrefour Egypt
-      const response = await axios.get(url, {
-        headers: this.headers,
-        timeout: this.timeout,
-        maxContentLength: 10 * 1024 * 1024, // 10MB max response size
-        validateStatus: (status) => status >= 200 && status < 500 // Accept all non-server error responses for debugging
-      });
-      
-      // Debug response status
-      console.log(`Carrefour product response status: ${response.status}`);
-      console.log(`Carrefour product response size: ${response.data ? (response.data.length || 0) : 0} characters`);
-      
-      // If we got a response, parse it
-      if (response.status === 200) {
-        // Check if response contains product title
-        if (response.data && 
-           (response.data.includes('pdp-product-title') || 
-            response.data.includes('product-title'))) {
-          console.log('Product title found in Carrefour response');
-        } else {
-          console.log('Product title NOT found in Carrefour response');
-        }
+      try {
+        // Make the request with browser-like headers
+        const response = await axios.get(apiUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Referer': 'https://www.carrefouregypt.com/',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive'
+          },
+          timeout: 10000 // 10 second timeout
+        });
         
-        return this.parseProductDetails(response.data, productCode);
-      } else {
-        console.log(`Carrefour returned non-200 status code: ${response.status}`);
+        if (response.status === 200 && response.data) {
+          console.log('Successfully got response from Carrefour product API');
+          
+          try {
+            const item = response.data;
+            
+            // Skip products without necessary fields
+            if (!item.id || !item.name) {
+              throw new Error('Product API response missing required fields');
+            }
+            
+            // Extract product info
+            const id = item.id;
+            const title = item.name;
+            
+            // Handle price formats
+            let price = 0;
+            if (typeof item.price === 'number') {
+              price = item.price;
+            } else if (item.price?.current) {
+              price = parseFloat(item.price.current);
+            } else if (item.price?.value) {
+              price = parseFloat(item.price.value);
+            }
+            
+            // Handle original price
+            let originalPrice: number | undefined;
+            if (item.price?.was && parseFloat(item.price.was) > price) {
+              originalPrice = parseFloat(item.price.was);
+            }
+            
+            // Calculate discount
+            let discount: number | undefined;
+            if (originalPrice && price && originalPrice > price) {
+              discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+            } else if (item.discount || item.discountPercentage) {
+              discount = parseFloat(item.discount || item.discountPercentage);
+            }
+            
+            // Handle images
+            let image = '';
+            if (item.images && item.images.length > 0) {
+              if (typeof item.images[0] === 'string') {
+                image = item.images[0];
+              } else {
+                image = item.images[0].url || '';
+              }
+            }
+            
+            // Ensure image URL is absolute
+            if (image && !image.startsWith('http')) {
+              image = `https://www.carrefouregypt.com${image.startsWith('/') ? '' : '/'}${image}`;
+            }
+            
+            // Fix image URL for CDN
+            if (image.includes('cdn.mafrservices.com') && !image.includes('?im=')) {
+              image = `${image}?im=Resize=400`;
+            }
+            
+            // Create product URL
+            const url = `https://www.carrefouregypt.com/mafegy/ar/products/${id}`;
+            
+            // Extract additional info
+            const brand = item.brand || '';
+            const description = item.description || '';
+            const specs = (item.attributes || []).map((attr: any) => ({
+              key: attr.name || '',
+              value: attr.value || ''
+            }));
+            
+            const isFreeDelivery = !!item.freeDelivery || !!item.freeShipping;
+            const isPromotional = discount !== undefined && discount > 0;
+            
+            return {
+              id: `carrefour-${id}`,
+              title,
+              price,
+              originalPrice,
+              discount,
+              image,
+              url,
+              platform: 'carrefour',
+              brand,
+              description,
+              specs,
+              isFreeDelivery,
+              isPromotional,
+              isBestPrice: false
+            };
+            
+          } catch (parseError) {
+            console.error('Error parsing Carrefour product API response:', parseError);
+          }
+        }
+      } catch (apiError) {
+        console.error('Error using Carrefour product API:', apiError);
+      }
+      
+      // Fallback to HTML parsing if API fails
+      const htmlUrl = `https://www.carrefouregypt.com/mafegy/ar/products/${productCode}`;
+      
+      console.log(`Making request to Carrefour product HTML URL: ${htmlUrl}`);
+      
+      try {
+        // Make the request with browser-like headers
+        const response = await axios.get(htmlUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Referer': 'https://www.carrefouregypt.com/',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+          },
+          timeout: 10000, // 10 second timeout
+          maxContentLength: 10 * 1024 * 1024 // 10MB max response size
+        });
+        
+        // Debug response status
+        console.log(`Carrefour product HTML response status: ${response.status}`);
+        console.log(`Carrefour product HTML response size: ${response.data ? (response.data.length || 0) : 0} characters`);
+        
+        // If we got a response, parse it
+        if (response.status === 200) {
+          return this.parseProductDetails(response.data, productCode);
+        }
+      } catch (htmlError) {
+        console.error('Error making request to Carrefour product HTML page:', htmlError);
       }
       
       return null;
@@ -146,7 +424,7 @@ export class CarrefourService {
         console.error(`Response status: ${error.response.status}`);
         console.error(`Response headers:`, error.response.headers);
       }
-      return null; // Return null instead of mock data
+      return null;
     }
   }
   

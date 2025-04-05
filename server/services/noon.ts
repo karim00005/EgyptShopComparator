@@ -270,94 +270,219 @@ export class NoonService {
     try {
       const products: Product[] = [];
       
+      // Log the structure if debug is needed
+      console.log('Parsing Noon JSON data structure');
+      
       // Check if data has hits array (search results)
       if (data.hits && Array.isArray(data.hits)) {
+        console.log(`Processing ${data.hits.length} products from hits array`);
+        
         for (const item of data.hits) {
           if (products.length >= 20) break; // Limit to 20 products
           
           try {
-            // Extract product ID
-            const productId = item.sku || item.product_id || '';
+            // Extract product ID with multiple fallbacks
+            const productId = 
+              item.sku || 
+              item.product_id || 
+              item.productId || 
+              item.id || 
+              item.objectID || 
+              '';
+              
             if (!productId) continue;
             
-            // Extract title
-            const title = item.name || item.title || '';
+            // Extract title with fallbacks
+            const title = 
+              item.name || 
+              item.title || 
+              item.displayName || 
+              item.brand_name && item.name ? `${item.brand_name} ${item.name}` : 
+              '';
             
-            // Extract price
+            // Skip products without a title
+            if (!title) continue;
+            
+            // Extract price with multiple fallbacks
             let price = 0;
-            if (item.price && item.price.value) {
-              price = parseFloat(String(item.price.value));
+            if (item.price) {
+              if (typeof item.price === 'number') {
+                price = item.price;
+              } else if (item.price.value) {
+                price = parseFloat(String(item.price.value));
+              } else if (item.price.now) {
+                price = parseFloat(String(item.price.now));
+              } else if (item.price.current) {
+                price = parseFloat(String(item.price.current));
+              }
             } else if (item.sale_price) {
               price = parseFloat(String(item.sale_price));
+            } else if (item.salePrice) {
+              price = parseFloat(String(item.salePrice));
+            } else if (item.offer_price) {
+              price = parseFloat(String(item.offer_price));
             }
             
-            // Extract original price if available
+            // Extract original price with multiple fallbacks
             let originalPrice: number | undefined;
-            if (item.price && item.price.was && item.price.was > price) {
-              originalPrice = parseFloat(String(item.price.was));
-            } else if (item.regular_price && item.regular_price > price) {
+            if (item.price) {
+              if (item.price.was && parseFloat(String(item.price.was)) > price) {
+                originalPrice = parseFloat(String(item.price.was));
+              } else if (item.price.old && parseFloat(String(item.price.old)) > price) {
+                originalPrice = parseFloat(String(item.price.old));
+              } else if (item.price.regular && parseFloat(String(item.price.regular)) > price) {
+                originalPrice = parseFloat(String(item.price.regular));
+              }
+            } else if (item.regular_price && parseFloat(String(item.regular_price)) > price) {
               originalPrice = parseFloat(String(item.regular_price));
+            } else if (item.regularPrice && parseFloat(String(item.regularPrice)) > price) {
+              originalPrice = parseFloat(String(item.regularPrice));
+            } else if (item.list_price && parseFloat(String(item.list_price)) > price) {
+              originalPrice = parseFloat(String(item.list_price));
             }
             
-            // Calculate discount percentage
+            // Calculate discount percentage with fallbacks
             let discount: number | undefined;
             if (originalPrice && price && originalPrice > price) {
               discount = Math.round(((originalPrice - price) / originalPrice) * 100);
-            } else if (item.discount && item.discount.percent) {
-              discount = parseInt(String(item.discount.percent), 10);
+            } else if (item.discount) {
+              if (typeof item.discount === 'number') {
+                discount = item.discount;
+              } else if (item.discount.percent) {
+                discount = parseInt(String(item.discount.percent), 10);
+              } else if (item.discount.percentage) {
+                discount = parseInt(String(item.discount.percentage), 10);
+              } else if (item.discount.value && originalPrice) {
+                discount = Math.round((parseInt(String(item.discount.value), 10) / originalPrice) * 100);
+              }
             }
             
-            // Extract image URL
+            // Extract image URL with multiple fallbacks
             let image = '';
+            
+            // First priority: image_keys which is noon's format
             if (item.image_keys && item.image_keys.length > 0) {
               // Format image URL based on image key
-              image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${item.image_keys[0]}.jpg`;
-            } else if (item.image) {
-              image = item.image;
+              const imageKey = item.image_keys[0];
+              image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${imageKey}.jpg`;
+            } 
+            // Second priority: direct image URL
+            else if (item.image) {
+              if (typeof item.image === 'string') {
+                image = item.image;
+              } else if (item.image.url) {
+                image = item.image.url;
+              }
+            } 
+            // Third priority: images array
+            else if (item.images && item.images.length > 0) {
+              if (typeof item.images[0] === 'string') {
+                image = item.images[0];
+              } else if (item.images[0].url) {
+                image = item.images[0].url;
+              }
+            }
+            // Fourth priority: thumbnail
+            else if (item.thumbnail) {
+              image = item.thumbnail;
             }
             
-            // Extract URL
+            // Make sure the image URL is absolute
+            if (image && !image.startsWith('http')) {
+              image = `https://k.nooncdn.com${image.startsWith('/') ? '' : '/'}${image}`;
+            }
+            
+            // Fix common issues with noon image URLs
+            if (image.includes('k.nooncdn.com') && !image.includes('t_desktop')) {
+              // Make sure we're using a decent size thumbnail
+              image = image.replace(/\/([^\/]+)$/, '/t_desktop-thumbnail-v2/$1');
+            }
+            
+            // Extract URL (use Arabic version for consistency)
             const url = `${this.baseUrl}/egypt-ar/product/${productId}`;
             
-            // Extract brand
-            const brand = item.brand || '';
+            // Extract brand with fallbacks
+            const brand = 
+              item.brand || 
+              item.brand_name || 
+              item.brandName || 
+              '';
             
             // Extract rating and review count
-            const rating = item.rating && item.rating.average ? parseFloat(String(item.rating.average)) : undefined;
-            const reviewCount = item.rating && item.rating.count ? parseInt(String(item.rating.count), 10) : undefined;
+            let rating: number | undefined;
+            let reviewCount: number | undefined;
             
-            // Check for free delivery
-            const isFreeDelivery = item.shipping && item.shipping.is_free_shipping === true;
+            if (item.rating) {
+              rating = 
+                typeof item.rating === 'number' 
+                  ? item.rating 
+                  : item.rating.average 
+                  ? parseFloat(String(item.rating.average)) 
+                  : item.rating.value 
+                  ? parseFloat(String(item.rating.value)) 
+                  : undefined;
+                  
+              reviewCount = 
+                item.rating.count 
+                ? parseInt(String(item.rating.count), 10) 
+                : item.rating.reviewCount 
+                ? parseInt(String(item.rating.reviewCount), 10)
+                : undefined;
+            }
+            
+            // Extract additional properties
+            const isFreeDelivery = 
+              (item.shipping && item.shipping.is_free_shipping === true) ||
+              (item.shipping && item.shipping.free === true) ||
+              item.free_shipping === true ||
+              item.freeShipping === true ||
+              false;
             
             // Check for promotional flags
-            const isPromotional = discount !== undefined && discount > 0;
+            const isPromotional = 
+              discount !== undefined && discount > 0 || 
+              item.isPromo === true || 
+              item.is_promotion === true || 
+              false;
             
-            products.push({
-              id: `noon-${productId}`,
-              title,
-              price,
-              originalPrice,
-              discount,
-              image,
-              url,
-              platform: 'noon',
-              rating,
-              reviewCount,
-              isFreeDelivery,
-              isPromotional,
-              brand,
-              isBestPrice: false
-            });
+            // Check if this product is available for sale
+            const isInStock = 
+              item.isInStock || 
+              item.is_in_stock || 
+              !item.is_out_of_stock ||
+              true; // Default to true if not specified
+            
+            // Only add products that are in stock with a valid price
+            if (isInStock && price > 0) {
+              products.push({
+                id: `noon-${productId}`,
+                title,
+                price,
+                originalPrice,
+                discount,
+                image,
+                url,
+                platform: 'noon',
+                rating,
+                reviewCount,
+                isFreeDelivery,
+                isPromotional,
+                brand,
+                isBestPrice: false
+              });
+            }
           } catch (e) {
             console.error('Error parsing Noon product from JSON:', e);
           }
         }
+      } else {
+        console.log('No hits array found in Noon JSON data');
       }
       
       return products;
     } catch (error) {
       console.error('Error parsing Noon JSON search results:', error);
-      return []; // Return empty array instead of mock data
+      return []; // Return empty array
     }
   }
   
