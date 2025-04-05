@@ -125,7 +125,7 @@ export function SearchBar() {
           className={`px-6 py-3.5 font-medium transition-all flex items-center justify-center min-w-[120px] ${
             isSearchActive 
               ? 'bg-gray-400 text-white cursor-not-allowed' 
-              : 'bg-gradient-to-r from-primary-600 to-primary-500 text-white hover:from-primary-700 hover:to-primary-600'
+              : 'bg-primary-600 text-white hover:bg-primary-700'
           }`}
           onClick={handleSearch}
           disabled={isSearchActive}

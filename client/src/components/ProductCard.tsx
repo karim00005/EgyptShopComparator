@@ -199,7 +199,7 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
 
         <div className="mb-4">
           <div className="flex items-baseline">
-            <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-700 to-primary-500">
+            <span className="text-lg font-bold text-primary-700">
               {formatPrice(product.price)}
             </span>
             {product.originalPrice && product.originalPrice > product.price && (
@@ -221,8 +221,8 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
         <div className="mt-4 flex gap-2">
           <a 
             href={product.url} 
-            className="flex-1 bg-gradient-to-r from-primary-600 to-primary-500 text-white px-3 py-2 rounded-lg text-sm font-medium 
-                       hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm 
+            className="flex-1 bg-primary-600 text-white px-3 py-2 rounded-lg text-sm font-medium 
+                       hover:bg-primary-700 transition-all shadow-sm 
                        text-center flex items-center justify-center gap-1 group-hover:shadow-md"
             target="_blank" 
             rel="noopener noreferrer"

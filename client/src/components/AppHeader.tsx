@@ -35,7 +35,7 @@ export function AppHeader() {
   
   return (
     <header dir={isRTL ? 'rtl' : 'ltr'} className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'shadow-lg' : 'shadow-md'}`}>
-      <div className="bg-gradient-to-r from-primary-800 to-primary-700 text-white py-3">
+      <div className="bg-primary-700 text-white py-3">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center">
             <Link href="/" className="flex items-center gap-2 group">
@@ -48,7 +48,7 @@ export function AppHeader() {
                 <span className="text-xl font-bold text-white group-hover:text-blue-50 transition-all duration-300">
                   {t('header.appName')}
                 </span>
-                <span className="text-sm font-medium opacity-90 ml-1">{t('header.country')}</span>
+                <span className="text-sm font-medium text-blue-50 ml-1">{t('header.country')}</span>
               </div>
             </Link>
             
@@ -77,7 +77,7 @@ export function AppHeader() {
               </button>
               
               <button 
-                className="flex items-center text-white bg-primary-600 hover:bg-primary-500 transition-all duration-200 rounded-full py-1.5 px-4 ml-2 shadow-sm"
+                className="flex items-center text-white bg-blue-600 hover:bg-blue-700 transition-all duration-200 rounded-full py-1.5 px-4 ml-2 shadow-sm"
               >
                 <span className="material-icons text-sm mr-1.5">person_outline</span>
                 <span className="text-sm font-medium">{t('header.login')}</span>
