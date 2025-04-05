@@ -152,82 +152,232 @@ export class CarrefourService {
       const $ = cheerio.load(html);
       const products: Product[] = [];
       
-      console.log("Parsing Carrefour results...");
+      console.log('Parsing Carrefour HTML search results...');
       
-      // Carrefour search results are in product cards with ul/li structure
-      // Updated selectors based on actual HTML structure
-      $('ul[data-testid="plp-products-grid"] li').each((i, element) => {
+      // Log all possible product containers we find
+      const mainGridCount = $('ul[data-testid="plp-products-grid"] li').length;
+      const alternativeGridCount = $('.product-grid-item, .product-list-item, .product-tile').length;
+      const anyProductLinks = $('a[href*="/product/"]').length;
+      
+      console.log(`Carrefour containers found: MainGrid=${mainGridCount}, AltGrid=${alternativeGridCount}, ProductLinks=${anyProductLinks}`);
+      
+      // Define a function to extract product details from any container element
+      const parseProductElement = (element: any) => {
         if (products.length >= 20) return; // Limit to 20 products
         
         try {
-          // Extract product details
-          const productLink = $(element).find('a[data-testid="product-tile"]');
-          const productUrl = productLink.attr('href') || '';
+          // Extract product URL - try various selectors
+          let productUrl = '';
+          let foundElement = null;
+          
+          // Try standard product link format
+          foundElement = $(element).find('a[data-testid="product-tile"]');
+          if (foundElement.length > 0) {
+            productUrl = foundElement.attr('href') || '';
+          }
+          
+          // If not found, try any link that might point to a product
+          if (!productUrl) {
+            foundElement = $(element).find('a[href*="/product/"]');
+            if (foundElement.length > 0) {
+              productUrl = foundElement.attr('href') || '';
+            }
+          }
+          
+          // Last resort: any link in the container
+          if (!productUrl) {
+            foundElement = $(element).find('a');
+            if (foundElement.length > 0) {
+              productUrl = foundElement.attr('href') || '';
+            }
+          }
+          
           if (!productUrl) return;
           
           // Extract product ID from URL
           const productId = productUrl.split('/').pop() || '';
           
-          // Title
-          const title = $(element).find('h3[data-testid="product-name"]').text().trim();
+          // Title - try various selectors
+          let title = '';
+          
+          // Try with data-testid selectors first
+          foundElement = $(element).find('h3[data-testid="product-name"]');
+          if (foundElement.length > 0) {
+            title = foundElement.text().trim();
+          }
+          
+          // Try other common selectors if no title found yet
+          if (!title) {
+            const titleSelectors = [
+              'h3.product-name', '.product-title', '.product-name',
+              'h2', 'h3', 'h4', '.title', '[itemprop="name"]'
+            ];
+            
+            for (const selector of titleSelectors) {
+              foundElement = $(element).find(selector);
+              if (foundElement.length > 0) {
+                title = foundElement.text().trim();
+                if (title) break;
+              }
+            }
+          }
+          
+          // If still no title, try the link text itself
+          if (!title && productUrl) {
+            const linkElement = $(element).find(`a[href="${productUrl}"]`);
+            if (linkElement.length > 0) {
+              title = linkElement.text().trim();
+            }
+          }
+          
           if (!title) return;
           
           // URL - ensure it starts with domain if it's a relative URL
           const url = productUrl.startsWith('http') ? productUrl : this.baseUrl + productUrl;
           
-          // Price
+          // Price - try various selectors
           let price = 0;
-          const priceElement = $(element).find('span[data-testid="current-price"]');
-          if (priceElement) {
-            const priceText = priceElement.text().trim();
+          
+          // Try with data-testid selectors first
+          foundElement = $(element).find('span[data-testid="current-price"]');
+          if (foundElement.length > 0) {
+            const priceText = foundElement.text().trim();
             if (priceText) {
-              // Extract only numbers and decimal point
               price = parseFloat(priceText.replace(/[^\d.]/g, ''));
             }
           }
           
-          // Original price
+          // Try other common price selectors
+          if (price === 0) {
+            const priceSelectors = [
+              '.price', '.current-price', '.product-price',
+              '[itemprop="price"]', '.new-price', '.final-price'
+            ];
+            
+            for (const selector of priceSelectors) {
+              foundElement = $(element).find(selector);
+              if (foundElement.length > 0) {
+                const priceText = foundElement.text().trim();
+                if (priceText) {
+                  const parsedPrice = parseFloat(priceText.replace(/[^\d.]/g, ''));
+                  if (!isNaN(parsedPrice) && parsedPrice > 0) {
+                    price = parsedPrice;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Original price - try various selectors
           let originalPrice: number | undefined;
-          const oldPriceElement = $(element).find('span[data-testid="old-price"]');
-          if (oldPriceElement.length > 0) {
-            const oldPriceText = oldPriceElement.text().trim();
+          
+          // Try with data-testid selectors first
+          foundElement = $(element).find('span[data-testid="old-price"]');
+          if (foundElement.length > 0) {
+            const oldPriceText = foundElement.text().trim();
             if (oldPriceText) {
               originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
             }
           }
           
-          // Discount
-          let discount: number | undefined;
-          if (originalPrice && price && originalPrice > price) {
-            discount = Math.round(((originalPrice - price) / originalPrice) * 100);
-          } else {
-            const discountElement = $(element).find('[data-testid="product-discount"]');
-            if (discountElement.length > 0) {
-              const discountText = discountElement.text().trim();
-              if (discountText && discountText.includes('%')) {
-                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+          // Try other common old price selectors
+          if (originalPrice === undefined) {
+            const oldPriceSelectors = [
+              '.old-price', '.original-price', '.was-price',
+              '[data-original-price]', '.strike-price', '.regular-price'
+            ];
+            
+            for (const selector of oldPriceSelectors) {
+              foundElement = $(element).find(selector);
+              if (foundElement.length > 0) {
+                const oldPriceText = foundElement.text().trim();
+                if (oldPriceText) {
+                  const parsedOldPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+                  if (!isNaN(parsedOldPrice) && parsedOldPrice > 0) {
+                    originalPrice = parsedOldPrice;
+                    break;
+                  }
+                }
               }
             }
           }
           
-          // Image
-          const imageElement = $(element).find('img');
-          const image = imageElement.attr('src') || '';
+          // Discount - calculate from prices or find badge
+          let discount: number | undefined;
+          if (originalPrice && price && originalPrice > price) {
+            discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+          } else {
+            // Try with data-testid selectors first
+            foundElement = $(element).find('[data-testid="product-discount"]');
+            if (foundElement.length > 0) {
+              const discountText = foundElement.text().trim();
+              if (discountText && discountText.includes('%')) {
+                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+              }
+            }
+            
+            // Try other common discount selectors
+            if (discount === undefined) {
+              const discountSelectors = [
+                '.discount', '.discount-percent', '.discount-badge',
+                '.label-sale', '.label-discount', '.saving-badge'
+              ];
+              
+              for (const selector of discountSelectors) {
+                foundElement = $(element).find(selector);
+                if (foundElement.length > 0) {
+                  const discountText = foundElement.text().trim();
+                  if (discountText && discountText.includes('%')) {
+                    discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Image - try various selectors
+          let image = '';
+          foundElement = $(element).find('img');
+          if (foundElement.length > 0) {
+            image = foundElement.attr('src') || foundElement.attr('data-src') || '';
+          }
           
           // Check for promotional flags
           const isPromotional = discount !== undefined && discount > 0;
           
           // Check for free delivery - look for terms indicating free delivery
-          const isFreeDelivery = $(element).text().toLowerCase().includes('توصيل مجاني') || 
-                                 $(element).text().toLowerCase().includes('free delivery');
+          const elementText = $(element).text().toLowerCase();
+          const isFreeDelivery = elementText.includes('توصيل مجاني') || 
+                                elementText.includes('free delivery');
           
           // Brand - Carrefour by default, but try to extract from various elements
           let brand = 'Carrefour';
-          const brandElement = $(element).find('[data-testid="product-brand"]');
-          if (brandElement.length > 0) {
-            const brandText = brandElement.text().trim();
+          foundElement = $(element).find('[data-testid="product-brand"]');
+          if (foundElement.length > 0) {
+            const brandText = foundElement.text().trim();
             if (brandText) {
               brand = brandText;
+            }
+          }
+          
+          // If brand still not found, try other common brand selectors
+          if (brand === 'Carrefour') {
+            const brandSelectors = [
+              '.brand', '.product-brand', '.manufacturer',
+              '[itemprop="brand"]'
+            ];
+            
+            for (const selector of brandSelectors) {
+              foundElement = $(element).find(selector);
+              if (foundElement.length > 0) {
+                const brandText = foundElement.text().trim();
+                if (brandText) {
+                  brand = brandText;
+                  break;
+                }
+              }
             }
           }
           
@@ -250,7 +400,34 @@ export class CarrefourService {
         } catch (e) {
           console.error('Error parsing Carrefour product:', e);
         }
-      });
+      };
+      
+      // Try the main product grid first
+      if (mainGridCount > 0) {
+        console.log('Processing Carrefour products from main product grid');
+        $('ul[data-testid="plp-products-grid"] li').each((i, element) => parseProductElement(element));
+      }
+      
+      // If no products found, try alternative grid items
+      if (products.length === 0 && alternativeGridCount > 0) {
+        console.log('Processing Carrefour products from alternative grid');
+        $('.product-grid-item, .product-list-item, .product-tile').each((i, element) => parseProductElement(element));
+      }
+      
+      // Last resort: find any elements that might contain product links
+      if (products.length === 0 && anyProductLinks > 0) {
+        console.log('Looking for any elements with product links');
+        $('a[href*="/product/"]').each((i, element) => {
+          // Get the parent container of the link
+          const parent = $(element).closest('div, li');
+          if (parent.length > 0) {
+            parseProductElement(parent);
+          } else {
+            // If no suitable parent found, use the link's container
+            parseProductElement($(element).parent());
+          }
+        });
+      }
       
       console.log(`Found ${products.length} Carrefour products`);
       return products;
