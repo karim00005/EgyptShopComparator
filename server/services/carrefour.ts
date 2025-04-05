@@ -31,50 +31,45 @@ export class CarrefourService {
     try {
       console.log(`Searching Carrefour Egypt for: ${query}`);
       
-      // Use fallback if needed for development/testing
-      if (process.env.USE_MOCK_DATA === 'true') {
-        return this.generateMockProducts(query, 8);
-      }
+      // Encode query for Arabic support 
+      const encodedQuery = encodeURIComponent(query);
       
-      // Encode query for Arabic support - using proper unicode escaping for Arabic
-      // Use %u0633%u0643%u0631 format for Arabic characters based on actual API requests
-      const encodedQuery = query.split('').map(char => {
-        const code = char.charCodeAt(0);
-        if (code > 127) {
-          return `%u${code.toString(16).padStart(4, '0')}`;
-        }
-        return encodeURIComponent(char);
-      }).join('');
-      
+      // First try with standard URL format
       const url = `${this.searchUrl}?keyword=${encodedQuery}`;
       
       console.log(`Making request to Carrefour URL: ${url}`);
-      console.log(`With headers:`, JSON.stringify(this.headers, null, 2));
       
-      // Make the request to Carrefour Egypt
-      const response = await axios.get(url, {
-        headers: this.headers,
-        timeout: this.timeout,
-        maxContentLength: 10 * 1024 * 1024, // 10MB max response size
-        validateStatus: (status) => status >= 200 && status < 500 // Accept all non-server error responses for debugging
-      });
-      
-      // Debug response status
-      console.log(`Carrefour response status: ${response.status}`);
-      console.log(`Carrefour response size: ${response.data ? (response.data.length || 0) : 0} characters`);
-      
-      // If we got a response, parse it
-      if (response.status === 200) {
-        // Look for product grid in response
-        if (response.data && response.data.includes('plp-products-grid')) {
-          console.log('Product grid found in Carrefour response');
-        } else {
-          console.log('Product grid NOT found in Carrefour response');
-        }
+      try {
+        // Make the request with browser-like headers
+        const response = await axios.get(url, {
+          headers: {
+            ...this.headers,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8'
+          },
+          timeout: 15000, // Increased timeout for reliability
+          maxContentLength: 10 * 1024 * 1024 // 10MB max response size
+        });
         
-        return this.parseSearchResults(response.data, query);
-      } else {
-        console.log(`Carrefour returned non-200 status code: ${response.status}`);
+        // Debug response status
+        console.log(`Carrefour response status: ${response.status}`);
+        console.log(`Carrefour response size: ${response.data ? (response.data.length || 0) : 0} characters`);
+        
+        // If we got a response, parse it
+        if (response.status === 200) {
+          // Look for product grid in response
+          if (response.data && response.data.includes('plp-products-grid')) {
+            console.log('Product grid found in Carrefour response');
+          } else {
+            console.log('Product grid NOT found in Carrefour response');
+          }
+          
+          return this.parseSearchResults(response.data, query);
+        } else {
+          console.log(`Carrefour returned non-200 status code: ${response.status}`);
+        }
+      } catch (requestError) {
+        console.error('Error making request to Carrefour:', requestError);
       }
       
       return [];

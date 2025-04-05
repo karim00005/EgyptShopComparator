@@ -44,28 +44,59 @@ class ProductService {
       };
     }
     
-    // Execute searches in parallel
-    const searchPromises: Promise<Product[]>[] = [];
+    // Execute searches in parallel with better error handling
+    const platformPromises: { platform: string; promise: Promise<Product[]> }[] = [];
     
     if (platforms.includes('amazon')) {
-      searchPromises.push(this.amazonService.searchProducts(query));
+      platformPromises.push({
+        platform: 'amazon', 
+        promise: this.amazonService.searchProducts(query).catch(error => {
+          console.error(`Amazon search error: ${error.message}`);
+          return [];
+        })
+      });
     }
     
     if (platforms.includes('noon')) {
-      searchPromises.push(this.noonService.searchProducts(query));
+      platformPromises.push({
+        platform: 'noon',
+        promise: this.noonService.searchProducts(query).catch(error => {
+          console.error(`Noon search error: ${error.message}`);
+          return [];
+        })
+      });
     }
     
     if (platforms.includes('carrefour')) {
-      searchPromises.push(this.carrefourService.searchProducts(query));
+      platformPromises.push({
+        platform: 'carrefour',
+        promise: this.carrefourService.searchProducts(query).catch(error => {
+          console.error(`Carrefour search error: ${error.message}`);
+          return [];
+        })
+      });
     }
     
     if (platforms.includes('talabat')) {
-      searchPromises.push(this.talabatService.searchProducts(query));
+      platformPromises.push({
+        platform: 'talabat',
+        promise: this.talabatService.searchProducts(query).catch(error => {
+          console.error(`Talabat search error: ${error.message}`);
+          return [];
+        })
+      });
     }
     
     try {
-      // Gather all results
-      const results = await Promise.all(searchPromises);
+      // Gather all results with logging
+      const results = await Promise.all(platformPromises.map(p => p.promise));
+      
+      // Log results by platform
+      platformPromises.forEach((platformData, index) => {
+        const platformResults = results[index];
+        console.log(`${platformData.platform} returned ${platformResults.length} products`);
+      });
+      
       const allProducts = results.flat();
       
       // Filter products with missing or zero prices, or generic titles

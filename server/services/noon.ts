@@ -35,42 +35,48 @@ export class NoonService {
       // Encode query for Arabic support
       const encodedQuery = encodeURIComponent(query);
       
-      // First try the API endpoint to get JSON data
-      // Using the v3 search API endpoint based on actual requests
-      const apiUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/?q=${encodedQuery}`;
-      const fallbackUrl = `${this.searchUrl}/?q=${encodedQuery}`;
+      // Try the direct search URL which returns HTML with embedded JSON data
+      const directUrl = `${this.searchUrl}/?q=${encodedQuery}`;
       
-      console.log(`Making request to Noon API URL: ${apiUrl}`);
+      console.log(`Making request to Noon search URL: ${directUrl}`);
       
       try {
-        // Add API specific headers for JSON response
-        const apiResponse = await axios.get(apiUrl, {
+        // Use standard browser-like headers
+        const response = await axios.get(directUrl, {
           headers: {
             ...this.headers,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Referer': 'https://www.noon.com/egypt-ar/'
           },
-          timeout: this.timeout
+          timeout: 15000 // Increase timeout for better reliability
         });
         
-        if (apiResponse.status === 200 && apiResponse.data) {
-          console.log('Successfully used Noon API endpoint');
-          return this.parseJsonSearchResults(apiResponse.data, query);
+        if (response.status === 200) {
+          console.log('Successfully got Noon HTML response, extracting products');
+          
+          // First try to extract JSON data from HTML
+          try {
+            // Look for inline JSON data in the HTML response
+            const html = response.data;
+            // Use a more compatible regex pattern without the 's' flag
+            const searchDataMatch = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]+?)<\/script>/.exec(html);
+            if (searchDataMatch && searchDataMatch[1]) {
+              const jsonData = JSON.parse(searchDataMatch[1]);
+              // Check if there's search results data in the JSON
+              if (jsonData?.props?.pageProps?.searchResult?.hits) {
+                console.log('Found inline JSON search data');
+                return this.parseJsonSearchResults(jsonData.props.pageProps.searchResult, query);
+              }
+            }
+          } catch (jsonError) {
+            console.log('Failed to extract JSON data from HTML, falling back to HTML parsing', jsonError);
+          }
+          
+          // If JSON extraction fails, parse the HTML directly
+          return this.parseSearchResults(response.data, query);
         }
-      } catch (apiError) {
-        console.log('Noon API endpoint failed, falling back to HTML scraping', apiError);
-      }
-      
-      // Fallback to HTML scraping
-      const response = await axios.get(fallbackUrl, {
-        headers: this.headers,
-        timeout: this.timeout
-      });
-      
-      // If we got a response, parse it
-      if (response.status === 200) {
-        return this.parseSearchResults(response.data, query);
+      } catch (error) {
+        console.error('Noon search request failed:', error);
       }
       
       return [];
