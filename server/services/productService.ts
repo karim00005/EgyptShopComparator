@@ -44,13 +44,41 @@ class ProductService {
       };
     }
     
-    // Execute searches in parallel with better error handling
+    console.log(`Searching for: "${query}"`);
+    
+    // Set a timeout for each promise to avoid hanging requests
+    const SEARCH_TIMEOUT = 15000; // 15 seconds timeout
+    
+    // Function to create a promise with timeout
+    const createTimeoutPromise = <T>(promise: Promise<T>, timeoutMs: number, platformName: string): Promise<T> => {
+      let timeoutId: NodeJS.Timeout;
+      
+      const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${platformName} search timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+      
+      return Promise.race([
+        promise.then(result => {
+          clearTimeout(timeoutId);
+          return result;
+        }),
+        timeoutPromise
+      ]);
+    };
+    
+    // Execute searches in parallel with better error handling and timeouts
     const platformPromises: { platform: string; promise: Promise<Product[]> }[] = [];
     
     if (platforms.includes('amazon')) {
       platformPromises.push({
         platform: 'amazon', 
-        promise: this.amazonService.searchProducts(query).catch(error => {
+        promise: createTimeoutPromise(
+          this.amazonService.searchProducts(query), 
+          SEARCH_TIMEOUT, 
+          'Amazon'
+        ).catch(error => {
           console.error(`Amazon search error: ${error.message}`);
           return [];
         })
@@ -60,7 +88,11 @@ class ProductService {
     if (platforms.includes('noon')) {
       platformPromises.push({
         platform: 'noon',
-        promise: this.noonService.searchProducts(query).catch(error => {
+        promise: createTimeoutPromise(
+          this.noonService.searchProducts(query),
+          SEARCH_TIMEOUT, 
+          'Noon'
+        ).catch(error => {
           console.error(`Noon search error: ${error.message}`);
           return [];
         })
@@ -70,7 +102,11 @@ class ProductService {
     if (platforms.includes('carrefour')) {
       platformPromises.push({
         platform: 'carrefour',
-        promise: this.carrefourService.searchProducts(query).catch(error => {
+        promise: createTimeoutPromise(
+          this.carrefourService.searchProducts(query),
+          SEARCH_TIMEOUT, 
+          'Carrefour'
+        ).catch(error => {
           console.error(`Carrefour search error: ${error.message}`);
           return [];
         })
@@ -80,7 +116,11 @@ class ProductService {
     if (platforms.includes('talabat')) {
       platformPromises.push({
         platform: 'talabat',
-        promise: this.talabatService.searchProducts(query).catch(error => {
+        promise: createTimeoutPromise(
+          this.talabatService.searchProducts(query),
+          SEARCH_TIMEOUT, 
+          'Talabat'
+        ).catch(error => {
           console.error(`Talabat search error: ${error.message}`);
           return [];
         })
@@ -99,7 +139,7 @@ class ProductService {
       
       const allProducts = results.flat();
       
-      // Filter products with missing or zero prices, or generic titles
+      // Validate and fix product data
       const validProducts = allProducts.filter(product => {
         // Skip products with missing or zero price
         if (!product.price || product.price <= 0) return false;
@@ -109,7 +149,58 @@ class ProductService {
           return false;
         }
         
+        // Ensure URL is set properly
+        if (!product.url) {
+          return false;
+        }
+        
         return true;
+      }).map(product => {
+        // Ensure URLs are absolute and properly formed
+        if (product.url && !product.url.startsWith('http')) {
+          switch (product.platform) {
+            case 'amazon':
+              product.url = `https://www.amazon.eg${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'noon':
+              product.url = `https://www.noon.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'carrefour':
+              product.url = `https://www.carrefouregypt.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'talabat':
+              product.url = `https://www.talabat.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+          }
+        }
+        
+        // Add UTM tracking for analytics
+        if (product.url) {
+          const utmParams = `utm_source=pricena&utm_medium=comparison&utm_campaign=product`;
+          product.url = product.url.includes('?') 
+            ? `${product.url}&${utmParams}` 
+            : `${product.url}?${utmParams}`;
+        }
+        
+        // Ensure images are absolute URLs
+        if (product.image && !product.image.startsWith('http')) {
+          switch (product.platform) {
+            case 'amazon':
+              product.image = `https://www.amazon.eg${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'noon':
+              product.image = `https://f.nooncdn.com${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'carrefour':
+              product.image = `https://www.carrefouregypt.com${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'talabat':
+              product.image = `https://images.deliveryhero.io${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+          }
+        }
+        
+        return product;
       });
       
       // Process results (filter, sort, etc.)
@@ -153,25 +244,99 @@ class ProductService {
     try {
       let product: Product | null = null;
       
-      switch (platform) {
-        case 'amazon':
-          product = await this.amazonService.getProductDetails(productId);
-          break;
-        case 'noon':
-          product = await this.noonService.getProductDetails(productId);
-          break;
-        case 'carrefour':
-          product = await this.carrefourService.getProductDetails(productId);
-          break;
-        case 'talabat':
-          product = await this.talabatService.getProductDetails(productId);
-          break;
-        default:
-          throw new Error(`Unsupported platform: ${platform}`);
+      // Set timeout for operation
+      const DETAIL_TIMEOUT = 10000; // 10 seconds
+      
+      const fetchWithTimeout = async () => {
+        return new Promise<Product | null>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error(`${platform} product detail lookup timed out after ${DETAIL_TIMEOUT}ms`));
+          }, DETAIL_TIMEOUT);
+          
+          let promise: Promise<Product | null>;
+          
+          switch (platform) {
+            case 'amazon':
+              promise = this.amazonService.getProductDetails(productId);
+              break;
+            case 'noon':
+              promise = this.noonService.getProductDetails(productId);
+              break;
+            case 'carrefour':
+              promise = this.carrefourService.getProductDetails(productId);
+              break;
+            case 'talabat':
+              promise = this.talabatService.getProductDetails(productId);
+              break;
+            default:
+              clearTimeout(timeoutId);
+              reject(new Error(`Unsupported platform: ${platform}`));
+              return;
+          }
+          
+          promise.then(result => {
+            clearTimeout(timeoutId);
+            resolve(result);
+          }).catch(error => {
+            clearTimeout(timeoutId);
+            reject(error);
+          });
+        });
+      };
+      
+      try {
+        product = await fetchWithTimeout();
+      } catch (timeoutError) {
+        console.error(timeoutError);
+        return null;
       }
       
       if (product) {
-        // Cache the product
+        // Ensure URLs are absolute and properly formed
+        if (product.url && !product.url.startsWith('http')) {
+          switch (product.platform) {
+            case 'amazon':
+              product.url = `https://www.amazon.eg${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'noon':
+              product.url = `https://www.noon.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'carrefour':
+              product.url = `https://www.carrefouregypt.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+            case 'talabat':
+              product.url = `https://www.talabat.com${product.url.startsWith('/') ? '' : '/'}${product.url}`;
+              break;
+          }
+        }
+        
+        // Add UTM tracking
+        if (product.url) {
+          const utmParams = `utm_source=pricena&utm_medium=comparison&utm_campaign=product_details`;
+          product.url = product.url.includes('?') 
+            ? `${product.url}&${utmParams}` 
+            : `${product.url}?${utmParams}`;
+        }
+        
+        // Ensure images are absolute URLs
+        if (product.image && !product.image.startsWith('http')) {
+          switch (product.platform) {
+            case 'amazon':
+              product.image = `https://www.amazon.eg${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'noon':
+              product.image = `https://f.nooncdn.com${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'carrefour':
+              product.image = `https://www.carrefouregypt.com${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+            case 'talabat':
+              product.image = `https://images.deliveryhero.io${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+              break;
+          }
+        }
+        
+        // Cache the product with fixed URLs
         this.productCache.set(cacheKey, product);
       }
       

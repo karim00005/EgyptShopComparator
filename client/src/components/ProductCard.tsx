@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Product } from "@/utils/types";
 import { useFavorites } from "@/context/FavoritesContext";
 
@@ -12,6 +12,24 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
   const isFavorite = favorites.some(
     fav => fav.productId === product.id && fav.platform === product.platform
   );
+  
+  // State to handle image loading and errors
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  // Generate a fallback image URL based on platform and title
+  const getFallbackImage = () => {
+    const platformColors: Record<string, string> = {
+      amazon: 'FF9900',
+      noon: '56C9F3',
+      carrefour: '004E9E',
+      talabat: 'FF5A00'
+    };
+    
+    const color = platformColors[product.platform] || '888888';
+    const text = encodeURIComponent(product.title.slice(0, 30) || 'Product');
+    return `https://ui-avatars.com/api/?name=${text}&background=${color}&color=fff&size=300`;
+  };
   
   // Format price with currency
   const formatPrice = (price?: number) => {
@@ -89,15 +107,24 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
       <div className="relative">
+        {/* Loading skeleton */}
+        {!imageLoaded && !imageError && (
+          <div className="w-full h-48 bg-gray-100 animate-pulse flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-primary-500 rounded-full animate-spin"></div>
+          </div>
+        )}
+        
         <img 
-          src={product.image} 
+          src={!product.image || imageError ? getFallbackImage() : product.image} 
           alt={product.title} 
-          className="w-full h-48 object-contain bg-gray-50 border-b hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            // Fallback image on error
-            e.currentTarget.src = 'https://via.placeholder.com/300x300?text=Image+Not+Available';
+          className={`w-full h-48 object-contain bg-gray-50 border-b hover:scale-105 transition-transform duration-300 ${!imageLoaded && !imageError ? 'hidden' : ''}`}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageError(true);
+            setImageLoaded(true);
           }}
         />
+        
         <div className="absolute top-2 left-2 flex flex-col space-y-1">
           {product.isBestPrice && (
             <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md text-xs font-medium">Best Price</span>

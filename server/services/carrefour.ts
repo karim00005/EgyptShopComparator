@@ -346,7 +346,9 @@ export class CarrefourService {
       
       // Look for product images and links in preload tags in the head section
       const preloadItems: Array<{id: string, image: string}> = [];
-      const preloadLinks = $('link[rel="preload"][as="image"][href*="mafrservices"]');
+      
+      // Multiple selectors to capture different Carrefour HTML structures
+      const preloadLinks = $('link[rel="preload"][as="image"][href*="mafrservices"], link[rel="preload"][as="image"][href*="cdn.mafrservices.com"]');
       console.log(`Found ${preloadLinks.length} preloaded product images`);
       
       preloadLinks.each((i, element) => {
