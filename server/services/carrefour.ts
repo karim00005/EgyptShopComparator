@@ -40,20 +40,42 @@ export class CarrefourService {
       const encodedQuery = encodeURIComponent(query);
       const url = `${this.searchUrl}?keyword=${encodedQuery}`;
       
+      console.log(`Making request to Carrefour URL: ${url}`);
+      console.log(`With headers:`, JSON.stringify(this.headers, null, 2));
+      
       // Make the request to Carrefour Egypt
       const response = await axios.get(url, {
         headers: this.headers,
-        timeout: this.timeout
+        timeout: this.timeout,
+        maxContentLength: 10 * 1024 * 1024, // 10MB max response size
+        validateStatus: (status) => status >= 200 && status < 500 // Accept all non-server error responses for debugging
       });
+      
+      // Debug response status
+      console.log(`Carrefour response status: ${response.status}`);
+      console.log(`Carrefour response size: ${response.data ? (response.data.length || 0) : 0} characters`);
       
       // If we got a response, parse it
       if (response.status === 200) {
+        // Look for product grid in response
+        if (response.data && response.data.includes('plp-products-grid')) {
+          console.log('Product grid found in Carrefour response');
+        } else {
+          console.log('Product grid NOT found in Carrefour response');
+        }
+        
         return this.parseSearchResults(response.data, query);
+      } else {
+        console.log(`Carrefour returned non-200 status code: ${response.status}`);
       }
       
       return [];
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error searching Carrefour Egypt:', error);
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error(`Response headers:`, error.response.headers);
+      }
       return []; // Return empty array instead of mock data
     }
   }
@@ -77,20 +99,44 @@ export class CarrefourService {
       
       const url = `${this.productUrl}/${productCode}`;
       
+      console.log(`Making request to Carrefour product URL: ${url}`);
+      console.log(`With headers:`, JSON.stringify(this.headers, null, 2));
+      
       // Make the request to Carrefour Egypt
       const response = await axios.get(url, {
         headers: this.headers,
-        timeout: this.timeout
+        timeout: this.timeout,
+        maxContentLength: 10 * 1024 * 1024, // 10MB max response size
+        validateStatus: (status) => status >= 200 && status < 500 // Accept all non-server error responses for debugging
       });
+      
+      // Debug response status
+      console.log(`Carrefour product response status: ${response.status}`);
+      console.log(`Carrefour product response size: ${response.data ? (response.data.length || 0) : 0} characters`);
       
       // If we got a response, parse it
       if (response.status === 200) {
+        // Check if response contains product title
+        if (response.data && 
+           (response.data.includes('pdp-product-title') || 
+            response.data.includes('product-title'))) {
+          console.log('Product title found in Carrefour response');
+        } else {
+          console.log('Product title NOT found in Carrefour response');
+        }
+        
         return this.parseProductDetails(response.data, productCode);
+      } else {
+        console.log(`Carrefour returned non-200 status code: ${response.status}`);
       }
       
       return null;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error fetching Carrefour Egypt product ${productId}:`, error);
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error(`Response headers:`, error.response.headers);
+      }
       return null; // Return null instead of mock data
     }
   }
@@ -103,35 +149,48 @@ export class CarrefourService {
       const $ = cheerio.load(html);
       const products: Product[] = [];
       
-      // Carrefour search results are in product cards
-      $('.product-card').each((i, element) => {
+      console.log("Parsing Carrefour results...");
+      
+      // Carrefour search results are in product cards with ul/li structure
+      // Updated selectors based on actual HTML structure
+      $('ul[data-testid="plp-products-grid"] li').each((i, element) => {
         if (products.length >= 20) return; // Limit to 20 products
         
         try {
           // Extract product details
-          const productUrl = $(element).find('.product-name a').attr('href') || '';
+          const productLink = $(element).find('a[data-testid="product-tile"]');
+          const productUrl = productLink.attr('href') || '';
           if (!productUrl) return;
           
+          // Extract product ID from URL
           const productId = productUrl.split('/').pop() || '';
           
           // Title
-          const title = $(element).find('.product-name a').text().trim();
+          const title = $(element).find('h3[data-testid="product-name"]').text().trim();
+          if (!title) return;
           
-          // URL
-          const url = this.baseUrl + productUrl;
+          // URL - ensure it starts with domain if it's a relative URL
+          const url = productUrl.startsWith('http') ? productUrl : this.baseUrl + productUrl;
           
           // Price
           let price = 0;
-          const priceText = $(element).find('.price-wrapper .price').text().trim();
-          if (priceText) {
-            price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+          const priceElement = $(element).find('span[data-testid="current-price"]');
+          if (priceElement) {
+            const priceText = priceElement.text().trim();
+            if (priceText) {
+              // Extract only numbers and decimal point
+              price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+            }
           }
           
           // Original price
           let originalPrice: number | undefined;
-          const oldPriceText = $(element).find('.price-wrapper .old-price').text().trim();
-          if (oldPriceText) {
-            originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+          const oldPriceElement = $(element).find('span[data-testid="old-price"]');
+          if (oldPriceElement.length > 0) {
+            const oldPriceText = oldPriceElement.text().trim();
+            if (oldPriceText) {
+              originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+            }
           }
           
           // Discount
@@ -139,23 +198,37 @@ export class CarrefourService {
           if (originalPrice && price && originalPrice > price) {
             discount = Math.round(((originalPrice - price) / originalPrice) * 100);
           } else {
-            const discountText = $(element).find('.discount-percent').text().trim();
-            if (discountText && discountText.includes('%')) {
-              discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+            const discountElement = $(element).find('[data-testid="product-discount"]');
+            if (discountElement.length > 0) {
+              const discountText = discountElement.text().trim();
+              if (discountText && discountText.includes('%')) {
+                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+              }
             }
           }
           
           // Image
-          const image = $(element).find('.product-image img').attr('src') || '';
+          const imageElement = $(element).find('img');
+          const image = imageElement.attr('src') || '';
           
           // Check for promotional flags
-          const isPromotional = $(element).find('.discount-percent, .promotion-label').length > 0;
+          const isPromotional = discount !== undefined && discount > 0;
           
-          // Check for free delivery
-          const isFreeDelivery = $(element).find('.free-delivery-label').length > 0;
+          // Check for free delivery - look for terms indicating free delivery
+          const isFreeDelivery = $(element).text().toLowerCase().includes('توصيل مجاني') || 
+                                 $(element).text().toLowerCase().includes('free delivery');
           
-          // Brand, if available
-          const brand = $(element).find('.product-brand').text().trim() || 'Carrefour';
+          // Brand - Carrefour by default, but try to extract from various elements
+          let brand = 'Carrefour';
+          const brandElement = $(element).find('[data-testid="product-brand"]');
+          if (brandElement.length > 0) {
+            const brandText = brandElement.text().trim();
+            if (brandText) {
+              brand = brandText;
+            }
+          }
+          
+          console.log(`Found Carrefour product: ${title} at ${price} EGP`);
           
           products.push({
             id: `carrefour-${productId}`,
@@ -176,8 +249,9 @@ export class CarrefourService {
         }
       });
       
+      console.log(`Found ${products.length} Carrefour products`);
       return products;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error parsing Carrefour search results:', error);
       return []; // Return empty array instead of mock data
     }
@@ -189,22 +263,35 @@ export class CarrefourService {
   private parseProductDetails(html: string, productCode: string): Product | null {
     try {
       const $ = cheerio.load(html);
+      console.log("Parsing Carrefour product details...");
       
-      // Extract product title
-      const title = $('.product-name').text().trim();
+      // Extract product title using updated selectors
+      const title = $('h1[data-testid="pdp-product-title"]').text().trim() || 
+                    $('h1.product-title').text().trim();
+      
+      if (!title) {
+        console.log("Could not find product title");
+        return null;
+      }
       
       // Extract current price
       let price = 0;
-      const priceText = $('.product-price .price').text().trim();
-      if (priceText) {
-        price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+      const priceElement = $('span[data-testid="current-price"]');
+      if (priceElement.length > 0) {
+        const priceText = priceElement.text().trim();
+        if (priceText) {
+          price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+        }
       }
       
       // Extract original price if discounted
       let originalPrice: number | undefined;
-      const oldPriceText = $('.product-price .old-price').text().trim();
-      if (oldPriceText) {
-        originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+      const oldPriceElement = $('span[data-testid="old-price"]');
+      if (oldPriceElement.length > 0) {
+        const oldPriceText = oldPriceElement.text().trim();
+        if (oldPriceText) {
+          originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+        }
       }
       
       // Calculate discount
@@ -212,34 +299,49 @@ export class CarrefourService {
       if (originalPrice && price && originalPrice > price) {
         discount = Math.round(((originalPrice - price) / originalPrice) * 100);
       } else {
-        const discountText = $('.discount-percent').text().trim();
-        if (discountText && discountText.includes('%')) {
-          discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+        const discountElement = $('[data-testid="product-discount"]');
+        if (discountElement.length > 0) {
+          const discountText = discountElement.text().trim();
+          if (discountText && discountText.includes('%')) {
+            discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+          }
         }
       }
       
       // Extract product image
-      const image = $('.product-gallery img').first().attr('src') || '';
+      const image = $('img[data-testid="product-image"]').attr('src') || 
+                   $('img.carousel-image').attr('src') || '';
       
       // Extract product description
-      const description = $('.product-description').text().trim();
+      const description = $('[data-testid="product-details-description"]').text().trim() || 
+                          $('.product-description').text().trim();
       
       // Check for free delivery
-      const deliveryText = $('.delivery-info').text().trim();
-      const isFreeDelivery = deliveryText.includes('Free') || deliveryText.includes('مجاني');
+      const pageText = $('body').text().toLowerCase();
+      const isFreeDelivery = pageText.includes('توصيل مجاني') || 
+                             pageText.includes('free delivery');
       
       // Extract brand
-      const brand = $('.product-brand').text().trim() || 'Carrefour';
+      let brand = 'Carrefour';
+      const brandElement = $('[data-testid="product-brand"]');
+      if (brandElement.length > 0) {
+        const brandText = brandElement.text().trim();
+        if (brandText) {
+          brand = brandText;
+        }
+      }
       
       // Extract specifications
       const specs: { key: string, value: string }[] = [];
-      $('.product-specifications tr').each((i, row) => {
-        const key = $(row).find('th').text().trim();
-        const value = $(row).find('td').text().trim();
+      $('[data-testid="product-attributes-table"] tr, .product-specifications tr, .product-attributes tr').each((i, row) => {
+        const key = $(row).find('th, td:first-child').text().trim();
+        const value = $(row).find('td:last-child').text().trim();
         if (key && value) {
           specs.push({ key, value });
         }
       });
+      
+      console.log(`Found Carrefour product details: ${title} at ${price} EGP`);
       
       return {
         id: `carrefour-${productCode}`,
@@ -257,7 +359,7 @@ export class CarrefourService {
         specs,
         isBestPrice: false
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error parsing Carrefour product details for ${productCode}:`, error);
       return null; // Return null instead of mock data
     }
