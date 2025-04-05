@@ -105,19 +105,19 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
   };
   
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
-      <div className="relative">
+    <div className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-gray-100 hover:border-gray-200 hover:-translate-y-1">
+      <div className="relative overflow-hidden">
         {/* Loading skeleton */}
         {!imageLoaded && !imageError && (
-          <div className="w-full h-48 bg-gray-100 animate-pulse flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-gray-300 border-t-primary-500 rounded-full animate-spin"></div>
+          <div className="w-full h-52 bg-gray-50 animate-pulse flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-gray-200 border-t-primary-500 rounded-full animate-spin"></div>
           </div>
         )}
         
         <img 
           src={!product.image || imageError ? getFallbackImage() : product.image} 
           alt={product.title} 
-          className={`w-full h-48 object-contain bg-gray-50 border-b hover:scale-105 transition-transform duration-300 ${!imageLoaded && !imageError ? 'hidden' : ''}`}
+          className={`w-full h-52 object-contain bg-white border-b group-hover:scale-105 transition-transform duration-500 ${!imageLoaded && !imageError ? 'hidden' : ''}`}
           onLoad={() => setImageLoaded(true)}
           onError={() => {
             setImageError(true);
@@ -127,27 +127,35 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
         
         <div className="absolute top-2 left-2 flex flex-col space-y-1">
           {product.isBestPrice && (
-            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md text-xs font-medium">Best Price</span>
+            <span className="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full text-xs font-medium border border-blue-100 shadow-sm">
+              Best Price
+            </span>
           )}
           {product.isPromotional && (
-            <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-xs font-medium">Deal</span>
+            <span className="bg-orange-50 text-orange-600 px-2.5 py-0.5 rounded-full text-xs font-medium border border-orange-100 shadow-sm">
+              Deal
+            </span>
           )}
           {product.isFreeDelivery && (
-            <span className="bg-green-50 text-green-600 px-2 py-0.5 rounded-md text-xs font-medium">Free Shipping</span>
+            <span className="bg-green-50 text-green-600 px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-100 shadow-sm">
+              Free Shipping
+            </span>
           )}
         </div>
+        
         {product.discount && (
-          <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-0.5 rounded-md text-xs font-bold">
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-red-600 to-red-500 text-white px-2.5 py-1 rounded-full text-xs font-bold shadow-sm">
             -{product.discount}%
           </div>
         )}
+        
         <div className="absolute bottom-2 right-2">
           <button 
-            className="bg-white p-1.5 rounded-full shadow hover:bg-gray-100 transition-colors"
+            className="bg-white p-2 rounded-full shadow-md hover:bg-gray-50 transition-colors transform hover:scale-110"
             onClick={toggleFavorite}
             aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
-            <span className={`material-icons ${isFavorite ? 'text-red-500' : 'text-gray-400 hover:text-red-500'} transition-colors`} style={{ fontSize: '18px' }}>
+            <span className={`material-icons ${isFavorite ? 'text-red-500' : 'text-gray-400 group-hover:text-red-400'} transition-colors`} style={{ fontSize: '18px' }}>
               {isFavorite ? 'favorite' : 'favorite_border'}
             </span>
           </button>
@@ -155,46 +163,57 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
       </div>
 
       <div className="p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center">
-            <img 
-              src={getPlatformLogo(product.platform)} 
-              alt={getPlatformName(product.platform)} 
-              className="w-5 h-5 object-contain mr-2"
-            />
-            <span className="text-sm font-medium text-gray-600">{getPlatformName(product.platform)}</span>
+            <div className="w-5 h-5 bg-white rounded-full overflow-hidden flex items-center justify-center shadow-sm mr-2">
+              <img 
+                src={getPlatformLogo(product.platform)} 
+                alt={getPlatformName(product.platform)}
+                className="w-4 h-4 object-contain"
+                onError={(e) => {
+                  // If image fails, replace with the first letter of platform name
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).parentElement!.innerHTML = getPlatformName(product.platform)[0];
+                }}
+              />
+            </div>
+            <span className="text-xs font-medium text-gray-500">{getPlatformName(product.platform)}</span>
           </div>
           
           {product.rating && (
-            <div className="flex items-center text-sm text-gray-600">
-              <span className="material-icons text-yellow-400" style={{ fontSize: '14px' }}>star</span>
-              <span className="ml-1">{product.rating.toFixed(1)}</span>
+            <div className="flex items-center text-sm bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-100">
+              <span className="material-icons text-yellow-400" style={{ fontSize: '12px' }}>star</span>
+              <span className="ml-0.5 text-xs font-medium text-yellow-700">{product.rating.toFixed(1)}</span>
               {product.reviewCount && (
-                <span className="ml-1 text-xs">({product.reviewCount})</span>
+                <span className="ml-0.5 text-xs text-yellow-600">({product.reviewCount > 999 ? '999+' : product.reviewCount})</span>
               )}
             </div>
           )}
         </div>
 
-        <h3 className="font-medium text-gray-800 hover:text-primary-600 transition-colors line-clamp-2 h-12 mb-3">
+        <h3 className="font-medium text-gray-800 group-hover:text-primary-600 transition-colors line-clamp-2 h-12 mb-3 text-sm">
           <a href={product.url} className="block" target="_blank" rel="noopener noreferrer">
             {product.title}
           </a>
         </h3>
 
-        <div className="mb-3">
+        <div className="mb-4">
           <div className="flex items-baseline">
-            <span className="text-lg font-bold text-gray-900">{formatPrice(product.price)}</span>
+            <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-700 to-primary-500">
+              {formatPrice(product.price)}
+            </span>
             {product.originalPrice && product.originalPrice > product.price && (
-              <span className="ml-2 text-sm line-through text-gray-500">{formatPrice(product.originalPrice)}</span>
+              <span className="ml-2 text-sm line-through text-gray-400">{formatPrice(product.originalPrice)}</span>
             )}
           </div>
           {(product.discount || (product.originalPrice && product.originalPrice > product.price)) && (
-            <span className="text-xs text-green-600 font-medium">{calculateDiscount()}</span>
+            <span className="text-xs text-green-600 font-medium mt-1 inline-block">
+              {calculateDiscount()}
+            </span>
           )}
           {product.brand && (
-            <div className="mt-1 text-xs text-gray-500">
-              Brand: {product.brand}
+            <div className="mt-1.5 text-xs text-gray-500 inline-block bg-gray-50 px-2 py-0.5 rounded-full">
+              {product.brand}
             </div>
           )}
         </div>
@@ -202,7 +221,9 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
         <div className="mt-4 flex gap-2">
           <a 
             href={product.url} 
-            className="flex-1 bg-primary-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors text-center flex items-center justify-center gap-1"
+            className="flex-1 bg-gradient-to-r from-primary-600 to-primary-500 text-white px-3 py-2 rounded-lg text-sm font-medium 
+                       hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm 
+                       text-center flex items-center justify-center gap-1 group-hover:shadow-md"
             target="_blank" 
             rel="noopener noreferrer"
             onClick={handleOutboundClick}
@@ -210,20 +231,15 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
             <span className="material-icons text-sm">open_in_new</span>
             <span>Buy Now</span>
           </a>
-          <a 
-            href={product.url}
-            className="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center gap-1"
-            onClick={(e) => {
-              e.preventDefault();
-              handleCompareClick(e);
-            }}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button 
+            className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-all 
+                     flex items-center justify-center gap-1 shadow-sm hover:border-gray-300"
+            onClick={handleCompareClick}
             aria-label="Compare"
           >
             <span className="material-icons text-sm text-gray-600">compare</span>
-            <span className="text-sm text-gray-600">Compare</span>
-          </a>
+            <span className="text-xs font-medium text-gray-600">Compare</span>
+          </button>
         </div>
       </div>
     </div>

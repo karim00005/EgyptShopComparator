@@ -95,18 +95,18 @@ export function SearchBar() {
   
   return (
     <div className="w-full md:w-2/3 lg:w-1/2 relative">
-      <div className="relative flex shadow-sm">
+      <div className="relative flex shadow-md rounded-xl overflow-hidden">
         <div className="relative flex-grow">
           <input 
             type="text" 
             placeholder="Search products across all platforms..." 
-            className="w-full py-3 pl-12 pr-4 rounded-l-lg border border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-300 focus:outline-none transition-all"
+            className="w-full py-3.5 pl-12 pr-4 border-0 focus:ring-2 focus:ring-primary-300 focus:outline-none transition-all text-gray-800"
             value={searchInput}
             onChange={handleSearchInput}
             onKeyDown={handleKeyDown}
             disabled={isSearchActive}
           />
-          <div className="absolute left-3 top-3 text-gray-400 flex items-center transition-all duration-200">
+          <div className="absolute left-3.5 top-3.5 text-gray-400 flex items-center transition-all duration-200">
             {isSearchActive ? (
               <svg className="animate-spin h-6 w-6 text-primary-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -120,26 +120,39 @@ export function SearchBar() {
           </div>
         </div>
         <button 
-          className={`px-6 py-3 rounded-r-lg font-medium transition-all ${
+          className={`px-6 py-3.5 font-medium transition-all flex items-center justify-center min-w-[120px] ${
             isSearchActive 
               ? 'bg-gray-400 text-white cursor-not-allowed' 
-              : 'bg-primary-500 text-white hover:bg-primary-600'
-          } flex items-center justify-center min-w-[100px]`}
+              : 'bg-gradient-to-r from-primary-600 to-primary-500 text-white hover:from-primary-700 hover:to-primary-600'
+          }`}
           onClick={handleSearch}
           disabled={isSearchActive}
         >
           {isSearchActive ? (
-            <>
+            <div className="flex items-center justify-center">
               <span className="mr-2">Searching</span>
-              <span className="flex space-x-1">
-                <span className="animate-pulse delay-0">.</span>
-                <span className="animate-pulse delay-100">.</span>
-                <span className="animate-pulse delay-200">.</span>
-              </span>
-            </>
-          ) : 'Search'}
+              <div className="flex space-x-0.5">
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center">
+              <span>Search</span>
+              <svg className="ml-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
         </button>
       </div>
+      
+      {!isSearchActive && searchInput.length >= 2 && (
+        <div className="absolute right-1 -bottom-5 text-xs text-gray-500">
+          Press Enter to search
+        </div>
+      )}
     </div>
   );
 }
