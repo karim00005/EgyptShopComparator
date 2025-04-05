@@ -175,20 +175,28 @@ export function ProductCard({ product, onCompareClick }: ProductCardProps) {
         <div className="mt-4 flex gap-2">
           <a 
             href={product.url} 
-            className="flex-1 bg-primary-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors text-center"
+            className="flex-1 bg-primary-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors text-center flex items-center justify-center gap-1"
             target="_blank" 
             rel="noopener noreferrer"
             onClick={handleOutboundClick}
           >
-            View Deal
+            <span className="material-icons text-sm">open_in_new</span>
+            <span>Buy Now</span>
           </a>
-          <button 
-            className="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-            onClick={handleCompareClick}
+          <a 
+            href={product.url}
+            className="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center gap-1"
+            onClick={(e) => {
+              e.preventDefault();
+              handleCompareClick(e);
+            }}
+            target="_blank"
+            rel="noopener noreferrer"
             aria-label="Compare"
           >
             <span className="material-icons text-sm text-gray-600">compare</span>
-          </button>
+            <span className="text-sm text-gray-600">Compare</span>
+          </a>
         </div>
       </div>
     </div>
