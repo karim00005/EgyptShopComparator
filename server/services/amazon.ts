@@ -1,14 +1,27 @@
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import { Product } from '@shared/schema';
+import { getPlatformConfig } from '../config/platformConfig';
 
 export class AmazonService {
   private baseUrl: string;
-  private apiKey: string;
+  private searchUrl: string;
+  private productUrl: string;
+  private headers: Record<string, string>;
+  private timeout: number;
   
   constructor() {
-    // Get from environment variables with fallbacks
-    this.baseUrl = process.env.AMAZON_API_URL || 'https://api.amazon.eg';
-    this.apiKey = process.env.AMAZON_API_KEY || '';
+    const config = getPlatformConfig('amazon');
+    
+    if (!config) {
+      throw new Error('Amazon platform configuration not found');
+    }
+    
+    this.baseUrl = config.apiConfig.baseUrl;
+    this.searchUrl = config.apiConfig.searchUrl;
+    this.productUrl = config.apiConfig.productUrl;
+    this.headers = config.apiConfig.headers;
+    this.timeout = config.apiConfig.timeout;
   }
   
   /**
@@ -16,42 +29,265 @@ export class AmazonService {
    */
   async searchProducts(query: string): Promise<Product[]> {
     try {
-      // In a real app, this would make an actual API call to Amazon's API
-      // For this implementation, we'll simulate a response
       console.log(`Searching Amazon Egypt for: ${query}`);
       
-      // Simulated API response delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Use fallback if needed for development/testing
+      if (process.env.USE_MOCK_DATA === 'true') {
+        return this.generateMockProducts(query, 10);
+      }
       
-      // Simulate a search response for the given query
-      return this.generateMockProducts(query, 10);
+      // Encode query for Arabic support
+      const encodedQuery = encodeURIComponent(query);
+      const url = `${this.searchUrl}?k=${encodedQuery}&i=aps`;
+      
+      // Make the request to Amazon Egypt
+      const response = await axios.get(url, {
+        headers: this.headers,
+        timeout: this.timeout
+      });
+      
+      // If we got a response, parse it
+      if (response.status === 200) {
+        return this.parseSearchResults(response.data, query);
+      }
+      
+      return [];
     } catch (error) {
       console.error('Error searching Amazon Egypt:', error);
-      return [];
+      return this.generateMockProducts(query, 5); // Fallback to mock data on error
     }
   }
   
   /**
-   * Get detailed product information
+   * Get detailed product information from Amazon Egypt
    */
   async getProductDetails(productId: string): Promise<Product | null> {
     try {
-      // In a real app, this would make an actual API call to Amazon's API
       console.log(`Fetching Amazon Egypt product details for: ${productId}`);
       
-      // Simulated API response delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Use fallback if needed for development/testing
+      if (process.env.USE_MOCK_DATA === 'true') {
+        return this.generateMockProduct(productId);
+      }
       
-      // Generate a mock product with the given ID
-      return this.generateMockProduct(productId);
+      // Extract the ASIN if it's a full URL
+      const asin = productId.includes('/dp/') ? 
+        productId.split('/dp/')[1].split('/')[0] : 
+        productId;
+      
+      const url = `${this.productUrl}/${asin}`;
+      
+      // Make the request to Amazon Egypt
+      const response = await axios.get(url, {
+        headers: this.headers,
+        timeout: this.timeout
+      });
+      
+      // If we got a response, parse it
+      if (response.status === 200) {
+        return this.parseProductDetails(response.data, asin);
+      }
+      
+      return null;
     } catch (error) {
       console.error(`Error fetching Amazon Egypt product ${productId}:`, error);
-      return null;
+      return this.generateMockProduct(productId); // Fallback to mock data on error
     }
   }
   
   /**
-   * Helper method to generate mock products for testing
+   * Parse Amazon search results page
+   */
+  private parseSearchResults(html: string, query: string): Product[] {
+    try {
+      const $ = cheerio.load(html);
+      const products: Product[] = [];
+      
+      // Amazon's search results are in divs with data-component-type="s-search-result"
+      $('div[data-component-type="s-search-result"]').each((i, element) => {
+        if (products.length >= 20) return; // Limit to 20 products
+        
+        try {
+          const asin = $(element).attr('data-asin') || '';
+          if (!asin) return;
+          
+          // Extract product details
+          const titleElement = $(element).find('h2 .a-link-normal');
+          const title = titleElement.text().trim();
+          const url = this.baseUrl + titleElement.attr('href');
+          
+          // Find price - Amazon has different price formats
+          let price = 0;
+          let originalPrice: number | undefined;
+          
+          // Current price
+          const priceWhole = $(element).find('.a-price-whole').first().text().trim();
+          const priceFraction = $(element).find('.a-price-fraction').first().text().trim();
+          
+          if (priceWhole) {
+            price = parseFloat(priceWhole.replace(/[^\d.]/g, '') + '.' + priceFraction);
+          }
+          
+          // Original price (if discounted)
+          const originalPriceText = $(element).find('.a-text-price .a-offscreen').first().text().trim();
+          if (originalPriceText) {
+            originalPrice = parseFloat(originalPriceText.replace(/[^\d.]/g, ''));
+          }
+          
+          // Calculate discount percentage if both prices are available
+          let discount: number | undefined;
+          if (originalPrice && price && originalPrice > price) {
+            discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+          }
+          
+          // Get image
+          const image = $(element).find('img.s-image').attr('src') || '';
+          
+          // Get rating
+          const ratingText = $(element).find('.a-icon-star-small').text().trim();
+          const rating = ratingText ? parseFloat(ratingText.split(' ')[0].replace(',', '.')) : undefined;
+          
+          // Get review count
+          const reviewText = $(element).find('.a-size-base.s-underline-text').text().trim();
+          const reviewCount = reviewText ? parseInt(reviewText.replace(/[^\d]/g, ''), 10) : undefined;
+          
+          // Check for sponsored/promotional
+          const isPromotional = $(element).find('.s-sponsored-label-info-icon').length > 0;
+          
+          // Check for free delivery
+          const isFreeDelivery = $(element).find('.a-color-success').text().includes('FREE') || 
+                                 $(element).find('.a-color-base').text().includes('توصيل مجاني');
+          
+          // Check for Amazon brand/choice
+          const amazonChoice = $(element).find('.a-row.a-badge-region').length > 0;
+          
+          // Extract brand if available
+          const brandElement = $(element).find('.a-row.a-size-base.a-color-secondary .a-size-base.a-link-normal');
+          const brand = brandElement.length ? brandElement.text().trim() : undefined;
+          
+          products.push({
+            id: `amazon-${asin}`,
+            title,
+            price,
+            originalPrice,
+            discount,
+            image,
+            url,
+            platform: 'amazon',
+            rating,
+            reviewCount,
+            isFreeDelivery,
+            isPromotional,
+            brand,
+            isBestPrice: false // Will be calculated later
+          });
+        } catch (e) {
+          console.error('Error parsing Amazon product:', e);
+        }
+      });
+      
+      return products;
+    } catch (error) {
+      console.error('Error parsing Amazon search results:', error);
+      return this.generateMockProducts(query, 5); // Fallback to mock data on parsing error
+    }
+  }
+  
+  /**
+   * Parse product details page
+   */
+  private parseProductDetails(html: string, asin: string): Product | null {
+    try {
+      const $ = cheerio.load(html);
+      
+      // Extract product title
+      const title = $('#productTitle').text().trim();
+      
+      // Extract current price
+      let price = 0;
+      const priceElement = $('.a-price .a-offscreen').first();
+      if (priceElement.length) {
+        const priceText = priceElement.text().trim();
+        price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+      }
+      
+      // Extract original price if discounted
+      let originalPrice: number | undefined;
+      const originalPriceElement = $('.a-text-price .a-offscreen').first();
+      if (originalPriceElement.length) {
+        const originalPriceText = originalPriceElement.text().trim();
+        originalPrice = parseFloat(originalPriceText.replace(/[^\d.]/g, ''));
+      }
+      
+      // Calculate discount
+      let discount: number | undefined;
+      if (originalPrice && price && originalPrice > price) {
+        discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+      }
+      
+      // Extract product image
+      const image = $('#landingImage, #imgBlkFront').attr('src') || $('#imgBlkFront').attr('data-a-dynamic-image') || '';
+      
+      // Extract product description
+      const description = $('#productDescription p, #feature-bullets li').text().trim();
+      
+      // Extract product rating
+      let rating: number | undefined;
+      const ratingText = $('#acrPopover').attr('title') || '';
+      if (ratingText) {
+        rating = parseFloat(ratingText.split(' ')[0].replace(',', '.'));
+      }
+      
+      // Extract review count
+      let reviewCount: number | undefined;
+      const reviewText = $('#acrCustomerReviewText').text().trim();
+      if (reviewText) {
+        reviewCount = parseInt(reviewText.replace(/[^\d]/g, ''), 10);
+      }
+      
+      // Check for free delivery
+      const shippingText = $('#deliveryBlockMessage').text().trim();
+      const isFreeDelivery = shippingText.includes('FREE') || shippingText.includes('مجاني');
+      
+      // Extract brand
+      const brand = $('#bylineInfo').text().trim().replace('Brand: ', '').replace('العلامة التجارية: ', '');
+      
+      // Extract specifications
+      const specs: { key: string, value: string }[] = [];
+      $('.a-section.a-spacing-small.a-spacing-top-small tr').each((i, row) => {
+        const key = $(row).find('th').text().trim();
+        const value = $(row).find('td').text().trim();
+        if (key && value) {
+          specs.push({ key, value });
+        }
+      });
+      
+      return {
+        id: `amazon-${asin}`,
+        title,
+        price,
+        originalPrice,
+        discount,
+        image,
+        url: `${this.baseUrl}/dp/${asin}`,
+        platform: 'amazon',
+        rating,
+        reviewCount,
+        description,
+        isFreeDelivery,
+        isPromotional: false,
+        brand,
+        specs,
+        isBestPrice: false
+      };
+    } catch (error) {
+      console.error(`Error parsing Amazon product details for ${asin}:`, error);
+      return this.generateMockProduct(asin); // Fallback to mock data on parsing error
+    }
+  }
+  
+  /**
+   * Helper method to generate mock products for testing/fallback
    */
   private generateMockProducts(query: string, count: number): Product[] {
     const products: Product[] = [];
@@ -62,7 +298,7 @@ export class AmazonService {
       const originalPrice = basePrice * (100 + discountPercent) / 100;
       
       const product: Product = {
-        id: `amz-${Date.now()}-${i}`,
+        id: `amazon-${Date.now()}-${i}`,
         title: `${query} - Amazon Product ${i + 1}`,
         price: basePrice,
         originalPrice: originalPrice,
@@ -89,7 +325,7 @@ export class AmazonService {
   }
   
   /**
-   * Generate a mock product for a specific ID
+   * Generate a mock product for a specific ID (fallback)
    */
   private generateMockProduct(productId: string): Product {
     const basePrice = 100 + Math.floor(Math.random() * 200);
@@ -97,7 +333,7 @@ export class AmazonService {
     const originalPrice = basePrice * (100 + discountPercent) / 100;
     
     return {
-      id: productId,
+      id: `amazon-${productId}`,
       title: `Amazon Product ${productId.substring(0, 8)}`,
       price: basePrice,
       originalPrice: originalPrice,

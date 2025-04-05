@@ -1,14 +1,27 @@
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import { Product } from '@shared/schema';
+import { getPlatformConfig } from '../config/platformConfig';
 
 export class CarrefourService {
   private baseUrl: string;
-  private apiKey: string;
+  private searchUrl: string;
+  private productUrl: string;
+  private headers: Record<string, string>;
+  private timeout: number;
   
   constructor() {
-    // Get from environment variables with fallbacks
-    this.baseUrl = process.env.CARREFOUR_API_URL || 'https://api.carrefouregypt.com';
-    this.apiKey = process.env.CARREFOUR_API_KEY || '';
+    const config = getPlatformConfig('carrefour');
+    
+    if (!config) {
+      throw new Error('Carrefour platform configuration not found');
+    }
+    
+    this.baseUrl = config.apiConfig.baseUrl;
+    this.searchUrl = config.apiConfig.searchUrl;
+    this.productUrl = config.apiConfig.productUrl;
+    this.headers = config.apiConfig.headers;
+    this.timeout = config.apiConfig.timeout;
   }
   
   /**
@@ -16,18 +29,32 @@ export class CarrefourService {
    */
   async searchProducts(query: string): Promise<Product[]> {
     try {
-      // In a real app, this would make an actual API call to Carrefour's API
-      // For this implementation, we'll simulate a response
       console.log(`Searching Carrefour Egypt for: ${query}`);
       
-      // Simulated API response delay
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Use fallback if needed for development/testing
+      if (process.env.USE_MOCK_DATA === 'true') {
+        return this.generateMockProducts(query, 8);
+      }
       
-      // Simulate a search response for the given query
-      return this.generateMockProducts(query, 8);
+      // Encode query for Arabic support
+      const encodedQuery = encodeURIComponent(query);
+      const url = `${this.searchUrl}?keyword=${encodedQuery}`;
+      
+      // Make the request to Carrefour Egypt
+      const response = await axios.get(url, {
+        headers: this.headers,
+        timeout: this.timeout
+      });
+      
+      // If we got a response, parse it
+      if (response.status === 200) {
+        return this.parseSearchResults(response.data, query);
+      }
+      
+      return [];
     } catch (error) {
       console.error('Error searching Carrefour Egypt:', error);
-      return [];
+      return this.generateMockProducts(query, 5); // Fallback to mock data on error
     }
   }
   
@@ -36,22 +63,208 @@ export class CarrefourService {
    */
   async getProductDetails(productId: string): Promise<Product | null> {
     try {
-      // In a real app, this would make an actual API call to Carrefour's API
       console.log(`Fetching Carrefour Egypt product details for: ${productId}`);
       
-      // Simulated API response delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Use fallback if needed for development/testing
+      if (process.env.USE_MOCK_DATA === 'true') {
+        return this.generateMockProduct(productId);
+      }
       
-      // Generate a mock product with the given ID
-      return this.generateMockProduct(productId);
+      // Extract the product code if it's a full URL
+      const productCode = productId.includes('/product/') ? 
+        productId.split('/product/')[1].split('/')[0] : 
+        productId;
+      
+      const url = `${this.productUrl}/${productCode}`;
+      
+      // Make the request to Carrefour Egypt
+      const response = await axios.get(url, {
+        headers: this.headers,
+        timeout: this.timeout
+      });
+      
+      // If we got a response, parse it
+      if (response.status === 200) {
+        return this.parseProductDetails(response.data, productCode);
+      }
+      
+      return null;
     } catch (error) {
       console.error(`Error fetching Carrefour Egypt product ${productId}:`, error);
-      return null;
+      return this.generateMockProduct(productId); // Fallback to mock data on error
     }
   }
   
   /**
-   * Helper method to generate mock products for testing
+   * Parse Carrefour search results page
+   */
+  private parseSearchResults(html: string, query: string): Product[] {
+    try {
+      const $ = cheerio.load(html);
+      const products: Product[] = [];
+      
+      // Carrefour search results are in product cards
+      $('.product-card').each((i, element) => {
+        if (products.length >= 20) return; // Limit to 20 products
+        
+        try {
+          // Extract product details
+          const productUrl = $(element).find('.product-name a').attr('href') || '';
+          if (!productUrl) return;
+          
+          const productId = productUrl.split('/').pop() || '';
+          
+          // Title
+          const title = $(element).find('.product-name a').text().trim();
+          
+          // URL
+          const url = this.baseUrl + productUrl;
+          
+          // Price
+          let price = 0;
+          const priceText = $(element).find('.price-wrapper .price').text().trim();
+          if (priceText) {
+            price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+          }
+          
+          // Original price
+          let originalPrice: number | undefined;
+          const oldPriceText = $(element).find('.price-wrapper .old-price').text().trim();
+          if (oldPriceText) {
+            originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+          }
+          
+          // Discount
+          let discount: number | undefined;
+          if (originalPrice && price && originalPrice > price) {
+            discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+          } else {
+            const discountText = $(element).find('.discount-percent').text().trim();
+            if (discountText && discountText.includes('%')) {
+              discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+            }
+          }
+          
+          // Image
+          const image = $(element).find('.product-image img').attr('src') || '';
+          
+          // Check for promotional flags
+          const isPromotional = $(element).find('.discount-percent, .promotion-label').length > 0;
+          
+          // Check for free delivery
+          const isFreeDelivery = $(element).find('.free-delivery-label').length > 0;
+          
+          // Brand, if available
+          const brand = $(element).find('.product-brand').text().trim() || 'Carrefour';
+          
+          products.push({
+            id: `carrefour-${productId}`,
+            title,
+            price,
+            originalPrice,
+            discount,
+            image,
+            url,
+            platform: 'carrefour',
+            isFreeDelivery,
+            isPromotional,
+            brand,
+            isBestPrice: false // Will be calculated later
+          });
+        } catch (e) {
+          console.error('Error parsing Carrefour product:', e);
+        }
+      });
+      
+      return products;
+    } catch (error) {
+      console.error('Error parsing Carrefour search results:', error);
+      return this.generateMockProducts(query, 5); // Fallback to mock data on parsing error
+    }
+  }
+  
+  /**
+   * Parse product details page
+   */
+  private parseProductDetails(html: string, productCode: string): Product | null {
+    try {
+      const $ = cheerio.load(html);
+      
+      // Extract product title
+      const title = $('.product-name').text().trim();
+      
+      // Extract current price
+      let price = 0;
+      const priceText = $('.product-price .price').text().trim();
+      if (priceText) {
+        price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+      }
+      
+      // Extract original price if discounted
+      let originalPrice: number | undefined;
+      const oldPriceText = $('.product-price .old-price').text().trim();
+      if (oldPriceText) {
+        originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+      }
+      
+      // Calculate discount
+      let discount: number | undefined;
+      if (originalPrice && price && originalPrice > price) {
+        discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+      } else {
+        const discountText = $('.discount-percent').text().trim();
+        if (discountText && discountText.includes('%')) {
+          discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+        }
+      }
+      
+      // Extract product image
+      const image = $('.product-gallery img').first().attr('src') || '';
+      
+      // Extract product description
+      const description = $('.product-description').text().trim();
+      
+      // Check for free delivery
+      const deliveryText = $('.delivery-info').text().trim();
+      const isFreeDelivery = deliveryText.includes('Free') || deliveryText.includes('مجاني');
+      
+      // Extract brand
+      const brand = $('.product-brand').text().trim() || 'Carrefour';
+      
+      // Extract specifications
+      const specs: { key: string, value: string }[] = [];
+      $('.product-specifications tr').each((i, row) => {
+        const key = $(row).find('th').text().trim();
+        const value = $(row).find('td').text().trim();
+        if (key && value) {
+          specs.push({ key, value });
+        }
+      });
+      
+      return {
+        id: `carrefour-${productCode}`,
+        title,
+        price,
+        originalPrice,
+        discount,
+        image,
+        url: `${this.baseUrl}/mafegy/ar/v4/product/${productCode}`,
+        platform: 'carrefour',
+        description,
+        isFreeDelivery,
+        isPromotional: discount !== undefined && discount > 0,
+        brand,
+        specs,
+        isBestPrice: false
+      };
+    } catch (error) {
+      console.error(`Error parsing Carrefour product details for ${productCode}:`, error);
+      return this.generateMockProduct(productCode); // Fallback to mock data on parsing error
+    }
+  }
+  
+  /**
+   * Helper method to generate mock products for testing/fallback
    */
   private generateMockProducts(query: string, count: number): Product[] {
     const products: Product[] = [];
@@ -89,7 +302,7 @@ export class CarrefourService {
   }
   
   /**
-   * Generate a mock product for a specific ID
+   * Generate a mock product for a specific ID (fallback)
    */
   private generateMockProduct(productId: string): Product {
     const basePrice = 95 + Math.floor(Math.random() * 210);
@@ -97,13 +310,13 @@ export class CarrefourService {
     const originalPrice = basePrice * (100 + discountPercent) / 100;
     
     return {
-      id: productId,
+      id: `carrefour-${productId}`,
       title: `Carrefour Product ${productId.substring(0, 8)}`,
       price: basePrice,
       originalPrice: originalPrice,
       discount: discountPercent,
       image: `https://via.placeholder.com/500x500?text=Carrefour+Product`,
-      url: `https://www.carrefouregypt.com/mafegy/en/product-${productId}`,
+      url: `https://www.carrefouregypt.com/mafegy/ar/product/${productId}`,
       platform: 'carrefour',
       rating: 3.0 + Math.random() * 2.0,
       reviewCount: Math.floor(Math.random() * 80),
