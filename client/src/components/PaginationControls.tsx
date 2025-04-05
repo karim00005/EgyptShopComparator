@@ -71,14 +71,18 @@ export function PaginationControls({ totalItems, itemsPerPage = 20 }: Pagination
   const pageNumbers = getPageNumbers();
   
   return (
-    <div className="mt-8 flex justify-center">
-      <div className="inline-flex rounded-md shadow-sm">
+    <div className="my-8 flex flex-col items-center">
+      <div className="text-sm text-gray-600 mb-3">
+        Showing page {currentPage} of {totalPages} ({totalItems} products)
+      </div>
+      <div className="inline-flex rounded-md shadow">
         <button 
-          className="px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-l-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
+          aria-label="Previous page"
         >
-          <span className="material-icons" style={{ fontSize: '16px' }}>chevron_left</span>
+          <span className="material-icons" style={{ fontSize: '18px' }}>chevron_left</span>
         </button>
         
         {pageNumbers.map((page, i) => {
@@ -86,10 +90,10 @@ export function PaginationControls({ totalItems, itemsPerPage = 20 }: Pagination
             return (
               <button 
                 key={`ellipsis-${i}`}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300"
+                className="px-4 py-2 text-sm font-medium text-gray-400 bg-white border-t border-b border-gray-300"
                 disabled
               >
-                ...
+                •••
               </button>
             );
           }
@@ -97,12 +101,14 @@ export function PaginationControls({ totalItems, itemsPerPage = 20 }: Pagination
           return (
             <button 
               key={page}
-              className={`px-4 py-2 text-sm font-medium ${
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
                 currentPage === page 
-                  ? 'text-white bg-primary-500 border border-primary-500' 
-                  : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-100'
+                  ? 'text-white bg-primary-600 border-t border-b border-primary-600 hover:bg-primary-700' 
+                  : 'text-gray-700 bg-white border-t border-b border-gray-300 hover:bg-gray-50'
               }`}
               onClick={() => handlePageChange(page as number)}
+              aria-label={`Page ${page}`}
+              aria-current={currentPage === page ? 'page' : undefined}
             >
               {page}
             </button>
@@ -110,11 +116,12 @@ export function PaginationControls({ totalItems, itemsPerPage = 20 }: Pagination
         })}
         
         <button 
-          className="px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-r-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
+          aria-label="Next page"
         >
-          <span className="material-icons" style={{ fontSize: '16px' }}>chevron_right</span>
+          <span className="material-icons" style={{ fontSize: '18px' }}>chevron_right</span>
         </button>
       </div>
     </div>

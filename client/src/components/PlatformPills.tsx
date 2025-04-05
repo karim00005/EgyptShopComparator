@@ -47,25 +47,21 @@ export function PlatformPills() {
   };
   
   return (
-    <div className="mb-6 flex flex-wrap gap-2 mt-4">
+    <div className="mb-4 flex flex-wrap gap-3 mt-2">
       {PLATFORMS.map(platform => (
         <button 
           key={platform.id}
-          className={`flex items-center px-3 py-1 ${
+          className={`flex items-center px-4 py-2 ${
             activePlatforms.includes(platform.id) 
-              ? 'bg-primary-100 text-primary-800' 
-              : 'bg-gray-100 text-gray-600'
-          } rounded-full border ${
-            activePlatforms.includes(platform.id) 
-              ? 'border-primary-200 hover:bg-primary-200' 
-              : 'border-gray-200 hover:bg-gray-200'
-          } transition`}
+              ? 'bg-primary-50 text-primary-700 border-primary-400' 
+              : 'bg-white text-gray-600 border-gray-300'
+          } rounded-md border transition shadow-sm hover:shadow`}
           onClick={() => togglePlatform(platform.id)}
         >
-          <img src={platform.logo} alt={platform.name} className="w-4 h-4 mr-2" />
-          <span className="text-xs font-medium">{platform.name}</span>
+          <img src={platform.logo} alt={platform.name} className="w-5 h-5 mr-2" />
+          <span className="text-sm font-medium">{platform.name}</span>
           {activePlatforms.includes(platform.id) && (
-            <span className="material-icons text-sm ml-1">check</span>
+            <span className="material-icons text-sm ml-1 text-primary-600">check</span>
           )}
         </button>
       ))}

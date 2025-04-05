@@ -46,18 +46,18 @@ export function SearchBar() {
   
   return (
     <div className="w-full md:w-2/3 lg:w-1/2 relative">
-      <div className="relative">
+      <div className="relative flex">
         <input 
           type="text" 
           placeholder="Search products across all platforms..." 
-          className="w-full py-2 pl-10 pr-4 rounded-lg border border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition"
+          className="w-full py-3 pl-10 pr-4 rounded-l-lg border border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-300 focus:outline-none transition"
           value={searchInput}
           onChange={handleSearchInput}
           onKeyDown={handleKeyDown}
         />
-        <span className="absolute left-3 top-2.5 text-gray-400 material-icons">search</span>
+        <span className="absolute left-3 top-3.5 text-gray-400 material-icons">search</span>
         <button 
-          className="absolute right-2 top-1.5 bg-primary-500 text-white px-3 py-1 rounded-md hover:bg-primary-600 transition"
+          className="bg-primary-500 text-white px-6 py-3 rounded-r-lg hover:bg-primary-600 transition font-medium"
           onClick={handleSearch}
         >
           Search
