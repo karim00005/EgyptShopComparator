@@ -32,17 +32,34 @@ export class NoonService {
     try {
       console.log(`Searching Noon Egypt for: ${query}`);
       
-      // Use fallback if needed for development/testing
-      if (process.env.USE_MOCK_DATA === 'true') {
-        return this.generateMockProducts(query, 10);
-      }
-      
       // Encode query for Arabic support
       const encodedQuery = encodeURIComponent(query);
-      const url = `${this.searchUrl}/?q=${encodedQuery}`;
       
-      // Make the request to Noon Egypt
-      const response = await axios.get(url, {
+      // First try the API endpoint to get JSON data
+      const apiUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/?q=${encodedQuery}`;
+      const fallbackUrl = `${this.searchUrl}/?q=${encodedQuery}`;
+      
+      try {
+        // Add API specific headers for JSON response
+        const apiResponse = await axios.get(apiUrl, {
+          headers: {
+            ...this.headers,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: this.timeout
+        });
+        
+        if (apiResponse.status === 200 && apiResponse.data) {
+          console.log('Successfully used Noon API endpoint');
+          return this.parseJsonSearchResults(apiResponse.data, query);
+        }
+      } catch (apiError) {
+        console.log('Noon API endpoint failed, falling back to HTML scraping', apiError);
+      }
+      
+      // Fallback to HTML scraping
+      const response = await axios.get(fallbackUrl, {
         headers: this.headers,
         timeout: this.timeout
       });
@@ -60,26 +77,140 @@ export class NoonService {
   }
   
   /**
+   * Parse Noon search results from JSON response
+   */
+  private parseJsonSearchResults(data: any, query: string): Product[] {
+    try {
+      const products: Product[] = [];
+      
+      // Check if data has hits array (search results)
+      if (data.hits && Array.isArray(data.hits)) {
+        for (const item of data.hits) {
+          if (products.length >= 20) break; // Limit to 20 products
+          
+          try {
+            // Extract product ID
+            const productId = item.sku || item.product_id || '';
+            if (!productId) continue;
+            
+            // Extract title
+            const title = item.name || item.title || '';
+            
+            // Extract price
+            let price = 0;
+            if (item.price && item.price.value) {
+              price = parseFloat(String(item.price.value));
+            } else if (item.sale_price) {
+              price = parseFloat(String(item.sale_price));
+            }
+            
+            // Extract original price if available
+            let originalPrice: number | undefined;
+            if (item.price && item.price.was && item.price.was > price) {
+              originalPrice = parseFloat(String(item.price.was));
+            } else if (item.regular_price && item.regular_price > price) {
+              originalPrice = parseFloat(String(item.regular_price));
+            }
+            
+            // Calculate discount percentage
+            let discount: number | undefined;
+            if (originalPrice && price && originalPrice > price) {
+              discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+            } else if (item.discount && item.discount.percent) {
+              discount = parseInt(String(item.discount.percent), 10);
+            }
+            
+            // Extract image URL
+            let image = '';
+            if (item.image_keys && item.image_keys.length > 0) {
+              // Format image URL based on image key
+              image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${item.image_keys[0]}.jpg`;
+            } else if (item.image) {
+              image = item.image;
+            }
+            
+            // Extract URL
+            const url = `${this.baseUrl}/egypt-ar/product/${productId}`;
+            
+            // Extract brand
+            const brand = item.brand || '';
+            
+            // Extract rating and review count
+            const rating = item.rating && item.rating.average ? parseFloat(String(item.rating.average)) : undefined;
+            const reviewCount = item.rating && item.rating.count ? parseInt(String(item.rating.count), 10) : undefined;
+            
+            // Check for free delivery
+            const isFreeDelivery = item.shipping && item.shipping.is_free_shipping === true;
+            
+            // Check for promotional flags
+            const isPromotional = discount !== undefined && discount > 0;
+            
+            products.push({
+              id: `noon-${productId}`,
+              title,
+              price,
+              originalPrice,
+              discount,
+              image,
+              url,
+              platform: 'noon',
+              rating,
+              reviewCount,
+              isFreeDelivery,
+              isPromotional,
+              brand,
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error parsing Noon product from JSON:', e);
+          }
+        }
+      }
+      
+      return products;
+    } catch (error) {
+      console.error('Error parsing Noon JSON search results:', error);
+      return []; // Return empty array instead of mock data
+    }
+  }
+  
+  /**
    * Get detailed product information
    */
   async getProductDetails(productId: string): Promise<Product | null> {
     try {
       console.log(`Fetching Noon Egypt product details for: ${productId}`);
       
-      // Use fallback if needed for development/testing
-      if (process.env.USE_MOCK_DATA === 'true') {
-        return this.generateMockProduct(productId);
-      }
-      
       // Extract the product code if it's a full URL
       const productCode = productId.includes('/product/') ? 
         productId.split('/product/')[1].split('/')[0] : 
         productId;
       
-      const url = `${this.productUrl}/${productCode}`;
+      // First try the API endpoint to get JSON data
+      const apiUrl = `${this.baseUrl}/egypt-ar/productapi/v3/${productCode}`;
+      const fallbackUrl = `${this.productUrl}/${productCode}`;
       
-      // Make the request to Noon Egypt
-      const response = await axios.get(url, {
+      try {
+        // Try the API endpoint first
+        const apiResponse = await axios.get(apiUrl, {
+          headers: {
+            ...this.headers,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: this.timeout
+        });
+        
+        if (apiResponse.status === 200 && apiResponse.data) {
+          console.log('Successfully used Noon API endpoint for product details');
+          return this.parseJsonProductDetails(apiResponse.data, productCode);
+        }
+      } catch (apiError) {
+        console.log('Noon API endpoint failed for product details, falling back to HTML scraping', apiError);
+      }
+      
+      // Fallback to HTML scraping if API endpoint fails
+      const response = await axios.get(fallbackUrl, {
         headers: this.headers,
         timeout: this.timeout
       });
@@ -92,6 +223,104 @@ export class NoonService {
       return null;
     } catch (error) {
       console.error(`Error fetching Noon Egypt product ${productId}:`, error);
+      return null; // Return null instead of mock data
+    }
+  }
+  
+  /**
+   * Parse Noon product details from JSON response
+   */
+  private parseJsonProductDetails(data: any, productCode: string): Product | null {
+    try {
+      // Check if data is valid
+      if (!data || !data.product) {
+        return null;
+      }
+      
+      const product = data.product;
+      
+      // Extract title
+      const title = product.name || product.title || '';
+      
+      // Extract price
+      let price = 0;
+      if (product.price && product.price.value) {
+        price = parseFloat(String(product.price.value));
+      } else if (product.sale_price) {
+        price = parseFloat(String(product.sale_price));
+      }
+      
+      // Extract original price if available
+      let originalPrice: number | undefined;
+      if (product.price && product.price.was && product.price.was > price) {
+        originalPrice = parseFloat(String(product.price.was));
+      } else if (product.regular_price && product.regular_price > price) {
+        originalPrice = parseFloat(String(product.regular_price));
+      }
+      
+      // Calculate discount percentage
+      let discount: number | undefined;
+      if (originalPrice && price && originalPrice > price) {
+        discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+      } else if (product.discount && product.discount.percent) {
+        discount = parseInt(String(product.discount.percent), 10);
+      }
+      
+      // Extract image URL
+      let image = '';
+      if (product.image_keys && product.image_keys.length > 0) {
+        // Format image URL based on image key
+        image = `https://k.nooncdn.com/t_desktop-pdp-v1/${product.image_keys[0]}.jpg`;
+      } else if (product.image) {
+        image = product.image;
+      }
+      
+      // Extract URL
+      const url = `${this.baseUrl}/egypt-ar/product/${productCode}`;
+      
+      // Extract brand
+      const brand = product.brand ? product.brand.name || product.brand : '';
+      
+      // Extract rating and review count
+      const rating = product.rating && product.rating.average ? parseFloat(String(product.rating.average)) : undefined;
+      const reviewCount = product.rating && product.rating.count ? parseInt(String(product.rating.count), 10) : undefined;
+      
+      // Extract description
+      const description = product.description || '';
+      
+      // Check for free delivery
+      const isFreeDelivery = product.shipping && product.shipping.is_free_shipping === true;
+      
+      // Extract specifications
+      const specs: { key: string, value: string }[] = [];
+      if (product.specifications && Array.isArray(product.specifications)) {
+        product.specifications.forEach((spec: any) => {
+          if (spec && spec.name && spec.value) {
+            specs.push({ key: spec.name, value: spec.value });
+          }
+        });
+      }
+      
+      return {
+        id: `noon-${productCode}`,
+        title,
+        price,
+        originalPrice,
+        discount,
+        image,
+        url,
+        platform: 'noon',
+        rating,
+        reviewCount,
+        description,
+        isFreeDelivery,
+        isPromotional: discount !== undefined && discount > 0,
+        brand,
+        specs,
+        isBestPrice: false
+      };
+    } catch (error) {
+      console.error(`Error parsing Noon product details JSON for ${productCode}:`, error);
       return null; // Return null instead of mock data
     }
   }

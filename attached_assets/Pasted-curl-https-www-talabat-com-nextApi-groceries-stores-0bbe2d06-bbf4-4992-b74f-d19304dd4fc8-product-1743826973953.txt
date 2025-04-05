@@ -1,0 +1,16 @@
+curl ^"https://www.talabat.com/nextApi/groceries/stores/0bbe2d06-bbf4-4992-b74f-d19304dd4fc8/products?countryId=9^&query=^%^D8^%^B3^%^D9^%^83^%^D8^%^B1^&limit=10^&offset=0^&isDarkstore=true^&isMigrated=false^" ^
+  -H ^"accept: application/json, text/plain, */*^" ^
+  -H ^"accept-language: ar-KW^" ^
+  -H ^"appbrand: 1^" ^
+  -b ^"tlb_lng=ar; tlb_country=egypt; tlb_area=^%^7B^%^22id^%^22^%^3A9838^%^2C^%^22name^%^22^%^3A^%^22^%^D8^%^A7^%^D9^%^84^%^D9^%^85^%^D8^%^B9^%^D8^%^A7^%^D8^%^AF^%^D9^%^8A^%^20^%^D8^%^A7^%^D9^%^84^%^D9^%^82^%^D8^%^AF^%^D9^%^8A^%^D9^%^85^%^D9^%^87^%^20-^%^20^%^D8^%^B4^%^D8^%^A7^%^D8^%^B1^%^D8^%^B9^%^20^%^D8^%^A7^%^D9^%^84^%^D9^%^86^%^D9^%^87^%^D8^%^B6^%^D9^%^87^%^22^%^2C^%^22slug^%^22^%^3A^%^22MAADI-OLD-EL-NAHDA-STREET^%^22^%^2C^%^22fromMap^%^22^%^3Atrue^%^2C^%^22lngt^%^22^%^3A31.256500739811703^%^2C^%^22ltd^%^22^%^3A29.960284344254354^%^2C^%^22ipse^%^22^%^3Atrue^%^2C^%^22displayName^%^22^%^3A^%^22^%^D8^%^A7^%^D9^%^84^%^D9^%^85^%^D8^%^B9^%^D8^%^A7^%^D8^%^AF^%^D9^%^8A^%^20^%^D8^%^A7^%^D9^%^84^%^D9^%^82^%^D8^%^AF^%^D9^%^8A^%^D9^%^85^%^D9^%^87^%^20-^%^20^%^D8^%^B4^%^D8^%^A7^%^D8^%^B1^%^D8^%^B9^%^20^%^D8^%^A7^%^D9^%^84^%^D9^%^86^%^D9^%^87^%^D8^%^B6^%^D9^%^87^%^2C^%^209^%^22^%^7D; dhhPerseusGuestId=1740335088197.879144186642764900.e09g8t3n1j; __cf_bm=hyouWHScs2q6K3P_XwJV76Rc_RtLadumn4.vF6QjPIg-1743763028-1.0.1.1-CDkua03igdVIc31rSim.H7louHVQYe_PX4fiHqnLL0lXI9aLr1_iJAlERGYZGceAeDR0qLH8lbjiPRzEv4MOhT762yguC35BRafV5gZtRp9i4tMC6mukOYvKfzk.54sb; cf_clearance=.gZDOgP8KyEkrFobouA6ZYn5vBMGaGJ7311leZoFbeo-1743763031-1.2.1.1-awT58JixIS08oSF7TqRFEZzNSGxKY_Sj1x_0LwHqEMXmqoEBVbTZfm71u0T7SxCLYWCIvPswfGeIqIcMA7_k7XcXFIWswR2xT5R9DfWdaTvCU1KHQlsnKhaX1i7a7cNeojc8dE1Sgo4YZeaiGrWTfUNQnaMGKybPFf5wCynme4wpk4btXduVK4ldZIBSH1omI1Sph3V94ZPojIXv9cOtqKLbUmYdUI3CKgiWjcUVtGbzb0tLSChxRtIVob2T9MGP6yjfBzDizmgeDnfK_46XHOE.10g2C7ksGzJTGdBYeJFBlzYJN03lEaNHkYJpMuuwMyDaf0.mqTbJfykzpq9_w_2EkFkBpklt62GxMJ2w7Yg; next-i18next=en; tlb_vertical=1; AWSALB=bRIq5IMG0soHtjaqMB3zFEIElDsswqs5uEAYeV/d5iDXTj94NCb2ffz3DO6xY9uN9ctU5QsSZsTeKaZSSEuwVmo3df3d29JZdPQ206fo+SqEnfiZ63riviw90e39; AWSALBCORS=bRIq5IMG0soHtjaqMB3zFEIElDsswqs5uEAYeV/d5iDXTj94NCb2ffz3DO6xY9uN9ctU5QsSZsTeKaZSSEuwVmo3df3d29JZdPQ206fo+SqEnfiZ63riviw90e39^" ^
+  -H ^"priority: u=1, i^" ^
+  -H ^"referer: https://www.talabat.com/ar/egypt/grocery/619848/talabat-mart-maadi-old?aid=9838^" ^
+  -H ^"sec-ch-ua: ^\^"Chromium^\^";v=^\^"134^\^", ^\^"Not:A-Brand^\^";v=^\^"24^\^", ^\^"Google Chrome^\^";v=^\^"134^\^"^" ^
+  -H ^"sec-ch-ua-mobile: ?0^" ^
+  -H ^"sec-ch-ua-platform: ^\^"Windows^\^"^" ^
+  -H ^"sec-fetch-dest: empty^" ^
+  -H ^"sec-fetch-mode: cors^" ^
+  -H ^"sec-fetch-site: same-origin^" ^
+  -H ^"sourceapp: web^" ^
+  -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36^" ^
+  -H ^"x-device-source: 0^"
