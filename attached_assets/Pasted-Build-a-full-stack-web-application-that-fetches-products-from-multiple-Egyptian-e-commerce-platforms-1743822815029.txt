@@ -1,0 +1,123 @@
+Build a full-stack web application that fetches products from multiple Egyptian e-commerce platforms (Amazon Egypt, Noon, Carrefour Egypt, Talabat), compares their prices, and displays them in a unified interface. The app should support future API integrations and allow users to log in, favorite items, and get price alerts.
+
+🧩 Core Features
+1. 🔍 Product Search and Comparison
+Simultaneously search across Amazon, Noon, Carrefour, and Talabat using keywords.
+
+Compare product prices visually (highlight best price).
+
+Automatically sort results by lowest price first.
+
+2. 🛍️ Product Display
+For each result, show:
+
+✅ Product title (clean, no generic "Amazon Product (number)" titles).
+
+🏷️ Current price and original (sale) price.
+
+💸 Flag for promotional items.
+
+🖼️ Thumbnail image (correct format & resolution).
+
+🌐 Direct link to product (working, platform-specific).
+
+🏪 Platform logo (Amazon, Noon, etc.).
+
+📄 Short description/specifications (if available).
+
+⭐ Ratings and reviews count.
+
+3. 🔗 API Integration
+Integrate with:
+
+✅ Amazon Egypt
+
+✅ Noon Egypt
+
+✅ Carrefour Egypt
+
+✅ Talabat Egypt
+
+Ensure:
+
+Proper headers, query parameters, and pagination handling.
+
+Accurate response parsing (e.g., Noon: name, price, sale_price, image_key, url).
+
+Skip products with missing or zero price.
+
+4. ⚙️ API Configuration Support
+Each platform should be configurable via:
+
+JSON/YAML config (for simple APIs).
+
+Custom modules (for complex or JS-rendered APIs).
+
+Rate limiting, authentication, response parsing, and debug logging.
+
+5. 🎨 Frontend (React + Tailwind recommended)
+Clean, responsive UI.
+
+Search bar with filters (e.g., category, price range).
+
+Toggle: grid/list view.
+
+Sort dropdown: price low-high, relevance, etc.
+
+Product detail modal.
+
+Loading and error states.
+
+🚀 Stretch Goals
+🔐 User Features
+Login/signup system.
+
+Save favorite products.
+
+Email notifications for price drops.
+
+🛠️ Admin & Dev Tools
+Admin panel to add/configure new APIs.
+
+API testing interface with request/response logger.
+
+Field mapping system to normalize responses.
+
+📈 Extra
+Price history tracking.
+
+Reviews aggregation.
+
+Browser extension.
+
+Mobile app version.
+
+🧪 Example Noon Product Response Mapping
+json
+Copy
+Edit
+{
+  "name": "أرز الياسمين 1كيلوجرام",
+  "price": 149.5,
+  "sale_price": null,
+  "image_key": "v1676365013/N28716827A_1",
+  "url": "https://www.noon.com/egypt-en/jasmine-rice-1kg/p/N28716827A",
+  "brand": "الضحى",
+  "flags": ["free_delivery_eligible"],
+  "product_rating": {
+    "value": 4.6,
+    "count": 41
+  }
+}
+❗ Debugging Tips
+Log each API response in the console to detect malformed or empty data.
+
+Skip products with:
+
+Title like "Amazon Product (1234)".
+
+Price = 0 or null.
+
+Invalid links or image URLs.
+
+Always fallback or show placeholder if images/links are broken.
