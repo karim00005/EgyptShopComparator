@@ -151,284 +151,435 @@ export class CarrefourService {
       
       console.log('Parsing Carrefour HTML search results...');
       
+      // First try to extract product data from embedded JSON
+      try {
+        // Look for JSON data in script tags
+        let jsonData = null;
+        
+        // The data is often in a script with window.__INITIAL_STATE__
+        const stateMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*({.*?});/);
+        if (stateMatch && stateMatch[1]) {
+          try {
+            const state = JSON.parse(stateMatch[1]);
+            // Check various paths where product data might be located
+            if (state.search && state.search.products) {
+              jsonData = state.search.products;
+              console.log(`Found ${jsonData.length} products in __INITIAL_STATE__`);
+            } else if (state.catalog && state.catalog.products) {
+              jsonData = state.catalog.products;
+              console.log(`Found ${jsonData.length} products in catalog state`);
+            } else if (state.plp && state.plp.items) {
+              jsonData = state.plp.items;
+              console.log(`Found ${jsonData.length} products in plp state`);
+            }
+          } catch (e) {
+            console.log('Failed to parse __INITIAL_STATE__:', e);
+          }
+        }
+        
+        // Try to find next data
+        if (!jsonData) {
+          const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+          if (nextDataMatch && nextDataMatch[1]) {
+            try {
+              const nextData = JSON.parse(nextDataMatch[1]);
+              // Check various paths in the Next.js data structure
+              if (nextData.props?.pageProps?.searchResult?.products) {
+                jsonData = nextData.props.pageProps.searchResult.products;
+                console.log(`Found ${jsonData.length} products in __NEXT_DATA__ searchResult`);
+              } else if (nextData.props?.pageProps?.initialState?.search?.products) {
+                jsonData = nextData.props.pageProps.initialState.search.products;
+                console.log(`Found ${jsonData.length} products in __NEXT_DATA__ initialState`);
+              } else if (nextData.props?.pageProps?.products) {
+                jsonData = nextData.props.pageProps.products;
+                console.log(`Found ${jsonData.length} products in __NEXT_DATA__ props`);
+              }
+            } catch (e) {
+              console.log('Failed to parse __NEXT_DATA__:', e);
+            }
+          }
+        }
+        
+        // Look for product data in JSON-LD format
+        if (!jsonData) {
+          const jsonldMatch = html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/g);
+          if (jsonldMatch) {
+            for (const script of jsonldMatch) {
+              try {
+                const scriptContent = script.replace(/<script type="application\/ld\+json">/, '').replace(/<\/script>/, '');
+                const ldData = JSON.parse(scriptContent);
+                if (ldData['@type'] === 'ItemList' && ldData.itemListElement && ldData.itemListElement.length > 0) {
+                  const items = ldData.itemListElement.map((item: any) => item.item || item);
+                  jsonData = items;
+                  console.log(`Found ${jsonData.length} products in JSON-LD data`);
+                  break;
+                }
+              } catch (e) {
+                // Continue to next JSON-LD script
+              }
+            }
+          }
+        }
+        
+        // If we found JSON data, extract products
+        if (jsonData && Array.isArray(jsonData) && jsonData.length > 0) {
+          for (const item of jsonData) {
+            if (products.length >= 20) break;
+            
+            try {
+              // Extract needed properties with fallbacks
+              const id = item.id || item.productId || item.code || item.sku || '';
+              if (!id) continue;
+              
+              const title = item.name || item.title || item.displayName || '';
+              
+              // Handle price which might be in various formats
+              let price = 0;
+              if (typeof item.price === 'number') {
+                price = item.price;
+              } else if (item.price?.value) {
+                price = parseFloat(item.price.value);
+              } else if (item.price?.current) {
+                price = parseFloat(item.price.current);
+              } else if (item.salePrice) {
+                price = parseFloat(item.salePrice);
+              } else if (item.offerPrice) {
+                price = parseFloat(item.offerPrice);
+              }
+              
+              // Handle original price
+              let originalPrice: number | undefined;
+              if (typeof item.originalPrice === 'number' && item.originalPrice > price) {
+                originalPrice = item.originalPrice;
+              } else if (item.price?.was && parseFloat(item.price.was) > price) {
+                originalPrice = parseFloat(item.price.was);
+              } else if (item.price?.original && parseFloat(item.price.original) > price) {
+                originalPrice = parseFloat(item.price.original);
+              } else if (item.listPrice && parseFloat(item.listPrice) > price) {
+                originalPrice = parseFloat(item.listPrice);
+              }
+              
+              // Calculate discount
+              let discount: number | undefined;
+              if (originalPrice && price && originalPrice > price) {
+                discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+              } else if (item.discountPercentage || item.discount) {
+                discount = parseFloat(item.discountPercentage || item.discount);
+              }
+              
+              // Handle image URL
+              let image = '';
+              if (item.image) {
+                image = typeof item.image === 'string' ? item.image : item.image.url || item.image.src || '';
+              } else if (item.images && item.images.length > 0) {
+                image = item.images[0].url || item.images[0].src || item.images[0];
+              } else if (item.imageUrl) {
+                image = item.imageUrl;
+              }
+              
+              // Ensure the image URL is complete
+              if (image && !image.startsWith('http')) {
+                if (image.startsWith('/')) {
+                  image = `https://www.carrefouregypt.com${image}`;
+                } else {
+                  image = `https://www.carrefouregypt.com/${image}`;
+                }
+              }
+              
+              // Product URL
+              let url = '';
+              if (item.url) {
+                url = item.url.startsWith('http') ? item.url : `https://www.carrefouregypt.com${item.url}`;
+              } else {
+                url = `https://www.carrefouregypt.com/mafegy/ar/products/${id}`;
+              }
+              
+              // Brand
+              const brand = item.brand || '';
+              
+              // Additional properties
+              const isFreeDelivery = item.freeDelivery || item.freeShipping || false;
+              const isPromotional = discount !== undefined && discount > 0;
+              
+              console.log(`Found Carrefour product from JSON: ${title} at ${price} EGP`);
+              
+              products.push({
+                id: `carrefour-${id}`,
+                title,
+                price,
+                originalPrice,
+                discount,
+                image,
+                url,
+                platform: 'carrefour',
+                brand,
+                isFreeDelivery,
+                isPromotional,
+                isBestPrice: false
+              });
+            } catch (e) {
+              console.error('Error processing Carrefour JSON product:', e);
+            }
+          }
+          
+          // If we successfully extracted products from JSON, return them
+          if (products.length > 0) {
+            console.log(`Returning ${products.length} Carrefour products from JSON data`);
+            return products;
+          }
+        }
+      } catch (jsonError) {
+        console.log('JSON extraction failed for Carrefour, falling back to HTML parsing:', jsonError);
+      }
+      
+      // HTML parsing approach if JSON extraction failed
+      console.log('Starting HTML parsing for Carrefour products');
+      
+      // Look for product images and links in preload tags in the head section
+      const preloadItems: Array<{id: string, image: string}> = [];
+      const preloadLinks = $('link[rel="preload"][as="image"][href*="mafrservices"]');
+      console.log(`Found ${preloadLinks.length} preloaded product images`);
+      
+      preloadLinks.each((i, element) => {
+        try {
+          const imageUrl = $(element).attr('href') || '';
+          if (imageUrl) {
+            // Extract product ID from image URL
+            const urlParts = imageUrl.split('/');
+            let productId = '';
+            
+            // Look for product ID patterns in URL
+            for (const part of urlParts) {
+              if (/^\d+$/.test(part) || /^\w{6,}_main/.test(part)) {
+                productId = part.replace('_main', '');
+                break;
+              }
+            }
+            
+            if (productId) {
+              preloadItems.push({
+                id: productId,
+                image: imageUrl
+              });
+            }
+          }
+        } catch (e) {
+          // Continue to next preload link
+        }
+      });
+      
+      // If we found preloaded images, try to extract corresponding product data
+      if (preloadItems.length > 0) {
+        console.log(`Processing ${preloadItems.length} preloaded Carrefour products`);
+        
+        for (const item of preloadItems) {
+          if (products.length >= 20) break;
+          
+          try {
+            // Assume a standard product page URL format
+            const url = `https://www.carrefouregypt.com/mafegy/ar/products/${item.id}`;
+            
+            // Use a generic title based on search query
+            const title = `${query.charAt(0).toUpperCase() + query.slice(1)} - Carrefour`;
+            
+            // Create a minimal product entry
+            products.push({
+              id: `carrefour-${item.id}`,
+              title,
+              price: 0, // We don't have price information at this level
+              image: item.image,
+              url,
+              platform: 'carrefour',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing Carrefour preloaded product:', e);
+          }
+        }
+        
+        if (products.length > 0) {
+          console.log(`Extracted ${products.length} Carrefour products from preloaded images`);
+          return products;
+        }
+      }
+      
       // Log all possible product containers we find
       const mainGridCount = $('ul[data-testid="plp-products-grid"] li').length;
       const alternativeGridCount = $('.product-grid-item, .product-list-item, .product-tile').length;
       const anyProductLinks = $('a[href*="/product/"]').length;
+      const productCards = $('.product-card, [class*="productCard"], [class*="ProductCard"]').length;
       
-      console.log(`Carrefour containers found: MainGrid=${mainGridCount}, AltGrid=${alternativeGridCount}, ProductLinks=${anyProductLinks}`);
+      console.log(`Carrefour containers found: MainGrid=${mainGridCount}, AltGrid=${alternativeGridCount}, ProductLinks=${anyProductLinks}, ProductCards=${productCards}`);
       
-      // Define a function to extract product details from any container element
-      const parseProductElement = (element: any) => {
-        if (products.length >= 20) return; // Limit to 20 products
-        
-        try {
-          // Extract product URL - try various selectors
-          let productUrl = '';
-          let foundElement = null;
+      // Try standard HTML product containers if we still don't have products
+      // Check for current Carrefour layout containers
+      if (productCards > 0) {
+        $('.product-card, [class*="productCard"], [class*="ProductCard"]').each((i, element) => {
+          if (products.length >= 20) return false;
           
-          // Try standard product link format
-          foundElement = $(element).find('a[data-testid="product-tile"]');
-          if (foundElement.length > 0) {
-            productUrl = foundElement.attr('href') || '';
-          }
-          
-          // If not found, try any link that might point to a product
-          if (!productUrl) {
-            foundElement = $(element).find('a[href*="/product/"]');
-            if (foundElement.length > 0) {
-              productUrl = foundElement.attr('href') || '';
-            }
-          }
-          
-          // Last resort: any link in the container
-          if (!productUrl) {
-            foundElement = $(element).find('a');
-            if (foundElement.length > 0) {
-              productUrl = foundElement.attr('href') || '';
-            }
-          }
-          
-          if (!productUrl) return;
-          
-          // Extract product ID from URL
-          const productId = productUrl.split('/').pop() || '';
-          
-          // Title - try various selectors
-          let title = '';
-          
-          // Try with data-testid selectors first
-          foundElement = $(element).find('h3[data-testid="product-name"]');
-          if (foundElement.length > 0) {
-            title = foundElement.text().trim();
-          }
-          
-          // Try other common selectors if no title found yet
-          if (!title) {
-            const titleSelectors = [
-              'h3.product-name', '.product-title', '.product-name',
-              'h2', 'h3', 'h4', '.title', '[itemprop="name"]'
-            ];
+          try {
+            // Find product link
+            const link = $(element).find('a');
+            if (!link.length) return;
             
-            for (const selector of titleSelectors) {
-              foundElement = $(element).find(selector);
-              if (foundElement.length > 0) {
-                title = foundElement.text().trim();
-                if (title) break;
-              }
-            }
-          }
-          
-          // If still no title, try the link text itself
-          if (!title && productUrl) {
-            const linkElement = $(element).find(`a[href="${productUrl}"]`);
-            if (linkElement.length > 0) {
-              title = linkElement.text().trim();
-            }
-          }
-          
-          if (!title) return;
-          
-          // URL - ensure it starts with domain if it's a relative URL
-          const url = productUrl.startsWith('http') ? productUrl : this.baseUrl + productUrl;
-          
-          // Price - try various selectors
-          let price = 0;
-          
-          // Try with data-testid selectors first
-          foundElement = $(element).find('span[data-testid="current-price"]');
-          if (foundElement.length > 0) {
-            const priceText = foundElement.text().trim();
-            if (priceText) {
-              price = parseFloat(priceText.replace(/[^\d.]/g, ''));
-            }
-          }
-          
-          // Try other common price selectors
-          if (price === 0) {
-            const priceSelectors = [
-              '.price', '.current-price', '.product-price',
-              '[itemprop="price"]', '.new-price', '.final-price'
-            ];
+            const href = link.attr('href') || '';
+            // Extract product ID from URL
+            const productId = href.split('/').pop() || '';
             
-            for (const selector of priceSelectors) {
-              foundElement = $(element).find(selector);
-              if (foundElement.length > 0) {
-                const priceText = foundElement.text().trim();
-                if (priceText) {
-                  const parsedPrice = parseFloat(priceText.replace(/[^\d.]/g, ''));
-                  if (!isNaN(parsedPrice) && parsedPrice > 0) {
-                    price = parsedPrice;
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          
-          // Original price - try various selectors
-          let originalPrice: number | undefined;
-          
-          // Try with data-testid selectors first
-          foundElement = $(element).find('span[data-testid="old-price"]');
-          if (foundElement.length > 0) {
-            const oldPriceText = foundElement.text().trim();
-            if (oldPriceText) {
-              originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
-            }
-          }
-          
-          // Try other common old price selectors
-          if (originalPrice === undefined) {
-            const oldPriceSelectors = [
-              '.old-price', '.original-price', '.was-price',
-              '[data-original-price]', '.strike-price', '.regular-price'
-            ];
+            if (!productId) return;
             
-            for (const selector of oldPriceSelectors) {
-              foundElement = $(element).find(selector);
-              if (foundElement.length > 0) {
-                const oldPriceText = foundElement.text().trim();
-                if (oldPriceText) {
-                  const parsedOldPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
-                  if (!isNaN(parsedOldPrice) && parsedOldPrice > 0) {
-                    originalPrice = parsedOldPrice;
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          
-          // Discount - calculate from prices or find badge
-          let discount: number | undefined;
-          if (originalPrice && price && originalPrice > price) {
-            discount = Math.round(((originalPrice - price) / originalPrice) * 100);
-          } else {
-            // Try with data-testid selectors first
-            foundElement = $(element).find('[data-testid="product-discount"]');
-            if (foundElement.length > 0) {
-              const discountText = foundElement.text().trim();
-              if (discountText && discountText.includes('%')) {
-                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
-              }
+            // Try to find product title
+            const titleElement = $(element).find('[class*="title"], [class*="name"], h2, h3, h4');
+            const title = titleElement.length ? titleElement.text().trim() : `${query} - Carrefour`;
+            
+            // Try to find price
+            let price = 0;
+            const priceElement = $(element).find('[class*="price"], [class*="Price"]');
+            if (priceElement.length) {
+              const priceText = priceElement.text().trim();
+              price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
             }
             
-            // Try other common discount selectors
-            if (discount === undefined) {
-              const discountSelectors = [
-                '.discount', '.discount-percent', '.discount-badge',
-                '.label-sale', '.label-discount', '.saving-badge'
-              ];
-              
-              for (const selector of discountSelectors) {
-                foundElement = $(element).find(selector);
-                if (foundElement.length > 0) {
-                  const discountText = foundElement.text().trim();
-                  if (discountText && discountText.includes('%')) {
-                    discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
-                    break;
-                  }
-                }
-              }
+            // Find image
+            let image = '';
+            const img = $(element).find('img');
+            if (img.length) {
+              image = img.attr('src') || img.attr('data-src') || '';
             }
-          }
-          
-          // Image - try various selectors
-          let image = '';
-          foundElement = $(element).find('img');
-          if (foundElement.length > 0) {
-            image = foundElement.attr('src') || foundElement.attr('data-src') || '';
-          }
-          
-          // Check for promotional flags
-          const isPromotional = discount !== undefined && discount > 0;
-          
-          // Check for free delivery - look for terms indicating free delivery
-          const elementText = $(element).text().toLowerCase();
-          const isFreeDelivery = elementText.includes('توصيل مجاني') || 
-                                elementText.includes('free delivery');
-          
-          // Brand - Carrefour by default, but try to extract from various elements
-          let brand = 'Carrefour';
-          foundElement = $(element).find('[data-testid="product-brand"]');
-          if (foundElement.length > 0) {
-            const brandText = foundElement.text().trim();
-            if (brandText) {
-              brand = brandText;
-            }
-          }
-          
-          // If brand still not found, try other common brand selectors
-          if (brand === 'Carrefour') {
-            const brandSelectors = [
-              '.brand', '.product-brand', '.manufacturer',
-              '[itemprop="brand"]'
-            ];
             
-            for (const selector of brandSelectors) {
-              foundElement = $(element).find(selector);
-              if (foundElement.length > 0) {
-                const brandText = foundElement.text().trim();
-                if (brandText) {
-                  brand = brandText;
-                  break;
-                }
-              }
-            }
+            // Create URL
+            const url = href.startsWith('http') ? href : `https://www.carrefouregypt.com${href}`;
+            
+            products.push({
+              id: `carrefour-${productId}`,
+              title,
+              price,
+              image,
+              url,
+              platform: 'carrefour',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing Carrefour product card:', e);
           }
-          
-          console.log(`Found Carrefour product: ${title} at ${price} EGP`);
-          
-          products.push({
-            id: `carrefour-${productId}`,
-            title,
-            price,
-            originalPrice,
-            discount,
-            image,
-            url,
-            platform: 'carrefour',
-            isFreeDelivery,
-            isPromotional,
-            brand,
-            isBestPrice: false // Will be calculated later
-          });
-        } catch (e) {
-          console.error('Error parsing Carrefour product:', e);
-        }
-      };
-      
-      // Try the main product grid first
-      if (mainGridCount > 0) {
-        console.log('Processing Carrefour products from main product grid');
-        $('ul[data-testid="plp-products-grid"] li').each((i, element) => parseProductElement(element));
+        });
       }
       
-      // If no products found, try alternative grid items
-      if (products.length === 0 && alternativeGridCount > 0) {
-        console.log('Processing Carrefour products from alternative grid');
-        $('.product-grid-item, .product-list-item, .product-tile').each((i, element) => parseProductElement(element));
+      // Try the main product grid next
+      if (products.length === 0 && mainGridCount > 0) {
+        $('ul[data-testid="plp-products-grid"] li').each((i, element) => {
+          if (products.length >= 20) return false;
+          
+          try {
+            // Extract product URL
+            let productUrl = '';
+            const productLink = $(element).find('a[data-testid="product-tile"], a[href*="/product/"]');
+            
+            if (productLink.length > 0) {
+              productUrl = productLink.attr('href') || '';
+            } else {
+              // Last resort: any link in the container
+              const anyLink = $(element).find('a');
+              if (anyLink.length > 0) {
+                productUrl = anyLink.attr('href') || '';
+              }
+            }
+            
+            if (!productUrl) return;
+            
+            // Extract product ID from URL
+            const productId = productUrl.split('/').pop() || '';
+            
+            // Title
+            let title = '';
+            const titleElement = $(element).find('[data-testid="product-name"], .product-name, .product-title, h3');
+            if (titleElement.length > 0) {
+              title = titleElement.text().trim();
+            }
+            
+            if (!title) {
+              title = `${query} - Carrefour`;
+            }
+            
+            // Price
+            let price = 0;
+            const priceElement = $(element).find('[data-testid="current-price"], .price, .current-price');
+            if (priceElement.length > 0) {
+              const priceText = priceElement.text().trim();
+              price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
+            }
+            
+            // Image
+            let image = '';
+            const imgElement = $(element).find('img');
+            if (imgElement.length > 0) {
+              image = imgElement.attr('src') || imgElement.attr('data-src') || '';
+            }
+            
+            // URL
+            const url = productUrl.startsWith('http') ? productUrl : `https://www.carrefouregypt.com${productUrl}`;
+            
+            products.push({
+              id: `carrefour-${productId}`,
+              title,
+              price,
+              image,
+              url,
+              platform: 'carrefour',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing Carrefour grid product:', e);
+          }
+        });
       }
       
-      // Last resort: find any elements that might contain product links
+      // If we still don't have products, try generic approach with any product links
       if (products.length === 0 && anyProductLinks > 0) {
-        console.log('Looking for any elements with product links');
         $('a[href*="/product/"]').each((i, element) => {
-          // Get the parent container of the link
-          const parent = $(element).closest('div, li');
-          if (parent.length > 0) {
-            parseProductElement(parent);
-          } else {
-            // If no suitable parent found, use the link's container
-            parseProductElement($(element).parent());
+          if (products.length >= 20) return false;
+          
+          try {
+            const href = $(element).attr('href') || '';
+            const productId = href.split('/').pop() || '';
+            
+            if (!productId) return;
+            
+            // Try to get a reasonable title
+            let title = $(element).text().trim();
+            if (!title || title.length > 100) {
+              title = `${query} - Carrefour`;
+            }
+            
+            // Look for an image near the link
+            let image = '';
+            const parentContainer = $(element).closest('div');
+            const imgElement = parentContainer.find('img');
+            if (imgElement.length > 0) {
+              image = imgElement.attr('src') || imgElement.attr('data-src') || '';
+            }
+            
+            // URL
+            const url = href.startsWith('http') ? href : `https://www.carrefouregypt.com${href}`;
+            
+            products.push({
+              id: `carrefour-${productId}`,
+              title,
+              price: 0, // We don't have price information
+              image,
+              url,
+              platform: 'carrefour',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing Carrefour product link:', e);
           }
         });
       }
       
       console.log(`Found ${products.length} Carrefour products`);
       return products;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error parsing Carrefour search results:', error);
       return []; // Return empty array instead of mock data
     }

@@ -493,47 +493,117 @@ export class NoonService {
       
       console.log('Parsing Noon HTML search results...');
       
-      // Try to identify the current HTML structure
-      // First check for any product links that might contain paths to product pages
-      const productLinks = $('a[href*="/product/"]');
-      console.log(`Found ${productLinks.length} product links in HTML`);
+      // Look for embedded JSON data first - this is more reliable than HTML scraping
+      // Try to find the script containing product data
+      let jsonDataFound = false;
       
-      // Log all possible product containers we find
-      const productBlockCount = $('div[data-qa="product-block"]').length;
-      const productCardCount = $('.product-card, .productCard, .product-item, [data-testid="product-card"]').length;
-      const productGridCount = $('.productGrid, .product-grid, .products-grid').length;
-      
-      console.log(`Product containers found: Block=${productBlockCount}, Card=${productCardCount}, Grid=${productGridCount}`);
-      
-      // Define a function to extract product details from a container element
-      const parseProductElement = (element: any) => {
-        if (products.length >= 20) return; // Limit to 20 products
-        
+      // Check for searchPageProps which often contains the search results
+      const searchPageProps = html.match(/window\.__SEARCH_PAGE_PROPS__\s*=\s*({.+?});/);
+      if (searchPageProps && searchPageProps[1]) {
         try {
-            // Extract product details
-            const productUrl = $(element).find('a').attr('href') || '';
-            if (!productUrl) return;
+          const data = JSON.parse(searchPageProps[1]);
+          if (data.hits && Array.isArray(data.hits) && data.hits.length > 0) {
+            console.log(`Found ${data.hits.length} products in __SEARCH_PAGE_PROPS__`);
+            const parsedProducts = this.parseJsonSearchResults(data, query);
+            if (parsedProducts.length > 0) {
+              jsonDataFound = true;
+              return parsedProducts;
+            }
+          }
+        } catch (e) {
+          console.log('Failed to parse __SEARCH_PAGE_PROPS__:', e);
+        }
+      }
+
+      // Try to find product data in script tags with common JSON patterns
+      if (!jsonDataFound) {
+        const scriptTags = html.match(/<script[^>]*>([^<]+)<\/script>/g);
+        if (scriptTags) {
+          for (const script of scriptTags) {
+            try {
+              // Look for JSON objects that likely contain product data
+              const jsonMatch = script.match(/\{.+?"products"\s*:\s*\[.+?\]/) || 
+                              script.match(/\{.+?"hits"\s*:\s*\[.+?\]/) || 
+                              script.match(/\{.+?"searchResult"\s*:\s*\{.+?\}/);
+              
+              if (jsonMatch) {
+                const jsonData = JSON.parse(jsonMatch[0]);
+                if (jsonData.products && Array.isArray(jsonData.products) && jsonData.products.length > 0) {
+                  console.log(`Found ${jsonData.products.length} products in script JSON`);
+                  const parsedProducts = this.parseJsonSearchResults({hits: jsonData.products}, query);
+                  if (parsedProducts.length > 0) {
+                    jsonDataFound = true;
+                    return parsedProducts;
+                  }
+                } else if (jsonData.hits && Array.isArray(jsonData.hits) && jsonData.hits.length > 0) {
+                  console.log(`Found ${jsonData.hits.length} hits in script JSON`);
+                  const parsedProducts = this.parseJsonSearchResults(jsonData, query);
+                  if (parsedProducts.length > 0) {
+                    jsonDataFound = true;
+                    return parsedProducts;
+                  }
+                } else if (jsonData.searchResult && jsonData.searchResult.hits) {
+                  console.log(`Found ${jsonData.searchResult.hits.length} products in searchResult`);
+                  const parsedProducts = this.parseJsonSearchResults(jsonData.searchResult, query);
+                  if (parsedProducts.length > 0) {
+                    jsonDataFound = true;
+                    return parsedProducts;
+                  }
+                }
+              }
+            } catch (e) {
+              // Continue to next script tag
+            }
+          }
+        }
+      }
+      
+      if (!jsonDataFound) {
+        console.log('No valid JSON data found, falling back to HTML parsing');
+      }
+      
+      // Enhanced HTML parsing approach
+      // Check for modern Noon layout which uses data-component and data-qa attributes
+      const modernProductContainers = $('[data-component="product"], [data-qa="product-block"], [data-qa="collection-item"]');
+      if (modernProductContainers.length > 0) {
+        console.log(`Found ${modernProductContainers.length} modern product containers`);
+        
+        modernProductContainers.each((i, element) => {
+          if (products.length >= 20) return false;
+          
+          try {
+            // Find product link
+            const linkElement = $(element).find('a[href*="/product/"]');
+            if (!linkElement.length) return;
             
-            const productId = productUrl.split('/').pop() || '';
+            const href = linkElement.attr('href') || '';
+            const productId = href.split('/').pop() || '';
             
-            // Title
-            const title = $(element).find('[data-qa="product-name"]').text().trim();
+            if (!productId) return;
+            
+            // Extract title
+            const titleElement = $(element).find('[data-qa="product-name"], .productTitle, h3, h2, .title');
+            const title = titleElement.length ? titleElement.text().trim() : '';
             
             // URL
-            const url = productUrl.startsWith('http') ? productUrl : this.baseUrl + productUrl;
+            const url = href.startsWith('http') ? href : `${this.baseUrl}${href}`;
             
             // Price
             let price = 0;
-            const priceText = $(element).find('[data-qa="price-wrapper"] span, .price').first().text().trim();
-            if (priceText) {
-              price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+            let priceText = '';
+            const newPriceElement = $(element).find('[data-qa="price"], [data-qa="new-price"], .price');
+            
+            if (newPriceElement.length) {
+              priceText = newPriceElement.text().trim();
+              price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
             }
             
             // Original price
             let originalPrice: number | undefined;
-            const oldPriceText = $(element).find('[data-qa="old-price"], .old-price, .originalPrice').text().trim();
-            if (oldPriceText) {
-              originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, ''));
+            const oldPriceElement = $(element).find('[data-qa="old-price"], .oldPrice');
+            if (oldPriceElement.length) {
+              const oldPriceText = oldPriceElement.text().trim();
+              originalPrice = parseFloat(oldPriceText.replace(/[^\d.]/g, '')) || undefined;
             }
             
             // Discount
@@ -541,43 +611,46 @@ export class NoonService {
             if (originalPrice && price && originalPrice > price) {
               discount = Math.round(((originalPrice - price) / originalPrice) * 100);
             } else {
-              const discountText = $(element).find('[data-qa="badge-text"], .discount, .discountBadge').text().trim();
-              if (discountText && discountText.includes('%')) {
-                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10);
+              const discountElement = $(element).find('[data-qa="discount-badge"], .discount-badge');
+              if (discountElement.length) {
+                const discountText = discountElement.text().trim();
+                discount = parseInt(discountText.replace(/[^\d]/g, ''), 10) || undefined;
               }
             }
             
             // Image
-            const image = $(element).find('img').attr('src') || '';
+            let image = '';
+            const imgElement = $(element).find('img');
+            if (imgElement.length) {
+              // Try various image attributes
+              image = imgElement.attr('src') || 
+                     imgElement.attr('data-src') || 
+                     imgElement.attr('data-original') || 
+                     imgElement.attr('data-lazy-src') || '';
+            }
+            
+            // If no image found but we have a productId, construct a noon CDN URL
+            if ((!image || image.includes('data:image')) && productId) {
+              image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${productId}.jpg`;
+            }
             
             // Rating
             let rating: number | undefined;
-            const ratingText = $(element).find('[data-qa="rating"], .rating').text().trim();
-            if (ratingText) {
-              rating = parseFloat(ratingText);
+            const ratingElement = $(element).find('[data-qa="rating"], .rating');
+            if (ratingElement.length) {
+              const ratingText = ratingElement.text().trim();
+              rating = parseFloat(ratingText) || undefined;
             }
             
-            // Review count
-            let reviewCount: number | undefined;
-            const reviewText = $(element).find('[data-qa="review-count"], .reviewCount').text().trim();
-            if (reviewText) {
-              reviewCount = parseInt(reviewText.replace(/[^\d]/g, ''), 10);
-            }
-            
-            // Check for promotional flags
-            const isPromotional = $(element).find('[data-qa="badge-text"], .discount-badge').length > 0 || discount !== undefined;
-            
-            // Check for free delivery
-            const isFreeDelivery = $(element).find('[data-qa="free-shipping"], .free-shipping, .freeDelivery').length > 0;
-            
-            // Brand, if available
-            const brand = $(element).find('[data-qa="brand-name"], .brand-name, .brandName').text().trim() || 'Noon';
+            // Brand
+            const brandElement = $(element).find('[data-qa="brand-name"], .brand');
+            const brand = brandElement.length ? brandElement.text().trim() : 'Noon';
             
             console.log(`Found Noon product: ${title} at ${price} EGP`);
             
             products.push({
               id: `noon-${productId}`,
-              title,
+              title: title || `Noon Product ${productId}`,
               price,
               originalPrice,
               discount,
@@ -585,120 +658,79 @@ export class NoonService {
               url,
               platform: 'noon',
               rating,
-              reviewCount,
-              isFreeDelivery,
-              isPromotional,
               brand,
-              isBestPrice: false // Will be calculated later
+              isFreeDelivery: $(element).find('[data-qa="free-shipping"], .freeDelivery').length > 0,
+              isPromotional: discount !== undefined,
+              isBestPrice: false
             });
-        } catch (e) {
-          console.error('Error parsing Noon product:', e);
-        }
-      };
-      
-      // Try different selectors to find product containers
-      if (productBlockCount > 0) {
-        console.log('Processing Noon products using data-qa="product-block" selector');
-        $('div[data-qa="product-block"]').each((i, element) => parseProductElement(element));
+          } catch (e) {
+            console.error('Error parsing Noon product:', e);
+          }
+        });
       }
       
-      // If no products found yet, try alternative selectors
-      if (products.length === 0 && productCardCount > 0) {
-        console.log('Processing Noon products using product card selectors');
-        $('.product-card, .productCard, .product-item, [data-testid="product-card"]').each((i, element) => parseProductElement(element));
-      }
-      
-      // If still no products, process the product links directly
-      if (products.length === 0 && productLinks.length > 0) {
-        console.log('Processing Noon products directly from product links');
+      // If no products found, try another approach with product cards and grids
+      if (products.length === 0) {
+        // Look for product grids and product items
+        const productItems = $('.productContainer, .productCard, .product-card, .product-item, [data-testid="product-card"]');
+        console.log(`Found ${productItems.length} product items`);
         
-        productLinks.each((i, element) => {
-          if (products.length >= 20) return false; // Limit to 20 products
+        productItems.each((i, element) => {
+          if (products.length >= 20) return false;
           
           try {
-            const href = $(element).attr('href') || '';
-            if (!href || !href.includes('/product/')) return;
+            // Find link with product ID
+            const link = $(element).find('a[href*="/product/"]');
+            if (!link.length) return;
             
-            // Extract the product ID from the URL
-            const urlParts = href.split('/');
-            const productIndex = urlParts.indexOf('product');
-            const productId = productIndex >= 0 && productIndex < urlParts.length - 1 ? urlParts[productIndex + 1] : '';
+            const href = link.attr('href') || '';
+            const productId = href.split('/').pop() || '';
             
             if (!productId) return;
             
-            // Look for parent product container - could be 1-3 levels up
-            let parentElement = $(element).parent();
-            let containerFound = false;
-            let level = 0;
-            const maxLevels = 3;
-            
-            // Find appropriate container by moving up the DOM
-            while (level < maxLevels && !containerFound) {
-              // If we find a likely product container, use it
-              if (
-                parentElement.find('img').length > 0 ||
-                parentElement.find('.price').length > 0 ||
-                parentElement.find('[data-qa="price-wrapper"]').length > 0 ||
-                parentElement.attr('data-qa') === 'product-block'
-              ) {
-                containerFound = true;
-                break;
-              }
-              
-              // Move up one level
-              parentElement = parentElement.parent();
-              level++;
-            }
-            
-            // If we didn't find a container, use the original element's parent
-            const container = containerFound ? parentElement : $(element).parent();
-            
-            // Extract basic product info
+            // Find title
             let title = '';
+            const possibleTitleElements = [
+              $(element).find('h1, h2, h3, h4, .title, .name, .productTitle'),
+              link.find('.title, .name'),
+              link
+            ];
             
-            // Try to find title in container
-            const titleElement = container.find('[data-qa="product-name"], h3, h2, .title, .product-title');
-            if (titleElement.length) {
-              title = titleElement.text().trim();
-            } else {
-              // If not found, check the link text or title attribute
-              title = $(element).text().trim() || $(element).attr('title') || '';
+            for (const el of possibleTitleElements) {
+              if (el.length) {
+                title = el.text().trim();
+                if (title) break;
+                title = el.attr('title') || '';
+                if (title) break;
+              }
             }
             
-            // If we still don't have a title, use a generic one with the product ID
-            if (!title) {
-              title = `Noon Product ${productId}`;
-            }
-            
-            // URL
-            const url = href.startsWith('http') ? href : this.baseUrl + href;
-            
-            // Look for price
+            // Price
             let price = 0;
-            const priceElement = container.find('[data-qa="price-wrapper"] span, .price, .now-price, [data-testid="price"]');
+            const priceElement = $(element).find('.price, [class*="price"], [data-testid="price"]');
             if (priceElement.length) {
               const priceText = priceElement.text().trim();
-              if (priceText) {
-                price = parseFloat(priceText.replace(/[^\d.]/g, ''));
-              }
+              price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
             }
             
-            // Look for image
+            // Image
             let image = '';
-            const imgElement = container.find('img').first();
-            if (imgElement.length) {
-              image = imgElement.attr('src') || imgElement.attr('data-src') || '';
+            const img = $(element).find('img');
+            if (img.length) {
+              image = img.attr('src') || img.attr('data-src') || '';
             }
             
-            // If no image found but we have a productId, construct a noon CDN URL
-            if (!image && productId) {
+            // Construct noon CDN URL for missing image
+            if ((!image || image.includes('data:image')) && productId) {
               image = `https://k.nooncdn.com/t_desktop-thumbnail-v2/${productId}.jpg`;
             }
             
-            // Create the product
+            // URL
+            const url = href.startsWith('http') ? href : `${this.baseUrl}${href}`;
+            
             products.push({
               id: `noon-${productId}`,
-              title,
+              title: title || `Noon Product ${productId}`,
               price,
               image,
               url,
@@ -706,7 +738,53 @@ export class NoonService {
               isBestPrice: false
             });
           } catch (e) {
-            console.error('Error processing Noon product link:', e);
+            console.error('Error parsing Noon product card:', e);
+          }
+        });
+      }
+      
+      // Last resort: search for all product links in the page
+      if (products.length === 0) {
+        const allProductLinks = $('a[href*="/product/"]');
+        console.log(`Found ${allProductLinks.length} raw product links`);
+        
+        const processedIds = new Set();
+        
+        allProductLinks.each((i, element) => {
+          if (products.length >= 20) return false;
+          
+          try {
+            const href = $(element).attr('href') || '';
+            const productId = href.split('/').pop() || '';
+            
+            if (!productId || processedIds.has(productId)) return;
+            processedIds.add(productId);
+            
+            // URL
+            const url = href.startsWith('http') ? href : `${this.baseUrl}${href}`;
+            
+            // Title
+            let title = $(element).text().trim() || $(element).attr('title') || '';
+            if (!title) {
+              // Try to find title in parent elements
+              const parentText = $(element).parent().text().trim();
+              if (parentText && parentText.length < 100) {
+                title = parentText;
+              }
+            }
+            
+            // Construct a product with minimal information
+            products.push({
+              id: `noon-${productId}`,
+              title: title || `Noon Product ${productId}`,
+              price: 0, // We don't have price information at this level
+              image: `https://k.nooncdn.com/t_desktop-thumbnail-v2/${productId}.jpg`,
+              url,
+              platform: 'noon',
+              isBestPrice: false
+            });
+          } catch (e) {
+            console.error('Error processing raw Noon product link:', e);
           }
         });
       }
@@ -715,7 +793,7 @@ export class NoonService {
       return products;
     } catch (error) {
       console.error('Error parsing Noon search results:', error);
-      return []; // Return empty array instead of mock data
+      return []; // Return empty array
     }
   }
   
