@@ -55,7 +55,7 @@ export class NoonService {
       return [];
     } catch (error) {
       console.error('Error searching Noon Egypt:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -92,7 +92,7 @@ export class NoonService {
       return null;
     } catch (error) {
       console.error(`Error fetching Noon Egypt product ${productId}:`, error);
-      return this.generateMockProduct(productId); // Fallback to mock data on error
+      return null; // Return null instead of mock data
     }
   }
   
@@ -196,7 +196,7 @@ export class NoonService {
       return products;
     } catch (error) {
       console.error('Error parsing Noon search results:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on parsing error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -292,7 +292,7 @@ export class NoonService {
       };
     } catch (error) {
       console.error(`Error parsing Noon product details for ${productCode}:`, error);
-      return this.generateMockProduct(productCode); // Fallback to mock data on parsing error
+      return null; // Return null instead of mock data
     }
   }
   

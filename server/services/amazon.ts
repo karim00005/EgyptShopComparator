@@ -54,7 +54,7 @@ export class AmazonService {
       return [];
     } catch (error) {
       console.error('Error searching Amazon Egypt:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -91,7 +91,7 @@ export class AmazonService {
       return null;
     } catch (error) {
       console.error(`Error fetching Amazon Egypt product ${productId}:`, error);
-      return this.generateMockProduct(productId); // Fallback to mock data on error
+      return null; // Return null instead of mock data
     }
   }
   
@@ -189,7 +189,7 @@ export class AmazonService {
       return products;
     } catch (error) {
       console.error('Error parsing Amazon search results:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on parsing error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -282,7 +282,7 @@ export class AmazonService {
       };
     } catch (error) {
       console.error(`Error parsing Amazon product details for ${asin}:`, error);
-      return this.generateMockProduct(asin); // Fallback to mock data on parsing error
+      return null; // Return null instead of mock data
     }
   }
   

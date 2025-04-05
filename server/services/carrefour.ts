@@ -54,7 +54,7 @@ export class CarrefourService {
       return [];
     } catch (error) {
       console.error('Error searching Carrefour Egypt:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -91,7 +91,7 @@ export class CarrefourService {
       return null;
     } catch (error) {
       console.error(`Error fetching Carrefour Egypt product ${productId}:`, error);
-      return this.generateMockProduct(productId); // Fallback to mock data on error
+      return null; // Return null instead of mock data
     }
   }
   
@@ -179,7 +179,7 @@ export class CarrefourService {
       return products;
     } catch (error) {
       console.error('Error parsing Carrefour search results:', error);
-      return this.generateMockProducts(query, 5); // Fallback to mock data on parsing error
+      return []; // Return empty array instead of mock data
     }
   }
   
@@ -259,7 +259,7 @@ export class CarrefourService {
       };
     } catch (error) {
       console.error(`Error parsing Carrefour product details for ${productCode}:`, error);
-      return this.generateMockProduct(productCode); // Fallback to mock data on parsing error
+      return null; // Return null instead of mock data
     }
   }
   
