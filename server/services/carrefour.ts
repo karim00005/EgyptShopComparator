@@ -34,20 +34,29 @@ export class CarrefourService {
       // Encode query for Arabic support 
       const encodedQuery = encodeURIComponent(query);
       
-      // First try with standard URL format
-      const url = `${this.searchUrl}?keyword=${encodedQuery}`;
+      // First, try with the direct API endpoint (per user's suggestion)
+      const directApiUrl = `https://www.carrefouregypt.com/mafegy/ar/v4/search?keyword=${encodedQuery}`;
       
-      console.log(`Making request to Carrefour URL: ${url}`);
+      console.log(`Making request to Carrefour API URL: ${directApiUrl}`);
       
       try {
         // Make the request with browser-like headers
-        const response = await axios.get(url, {
+        const response = await axios.get(directApiUrl, {
           headers: {
             ...this.headers,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8'
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            'Referer': 'https://www.carrefouregypt.com/',
+            'sec-ch-ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1'
           },
-          timeout: 15000, // Increased timeout for reliability
+          timeout: 20000, // Increased timeout for reliability
           maxContentLength: 10 * 1024 * 1024 // 10MB max response size
         });
         

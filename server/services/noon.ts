@@ -35,28 +35,57 @@ export class NoonService {
       // Encode query for Arabic support
       const encodedQuery = encodeURIComponent(query);
       
-      // First, try to use the Noon API directly
+      // First, try to use the Noon catalog API directly (per user's suggestion)
       try {
-        // This API endpoint appears to be public and doesn't require authentication
-        const apiUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/autocomplete/?q=${encodedQuery}&lang=ar`;
-        const apiResponse = await axios.get(apiUrl, {
+        // Direct catalog API endpoint
+        const catalogApiUrl = `https://www.noon.com/_svc/catalog/api/v3/search?q=${encodedQuery}`;
+        console.log(`Making request to Noon catalog API: ${catalogApiUrl}`);
+        
+        const apiResponse = await axios.get(catalogApiUrl, {
           headers: {
             ...this.headers,
             'Accept': 'application/json',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             'Referer': 'https://www.noon.com/egypt-ar/',
             'X-Locale': 'ar-eg',
-            'X-Platform': 'web'
+            'X-Platform': 'web',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8'
           },
-          timeout: 10000
+          timeout: 15000
         });
         
         if (apiResponse.status === 200 && apiResponse.data && apiResponse.data.hits) {
-          console.log(`Successfully used Noon API, found ${apiResponse.data.hits.length} products`);
+          console.log(`Successfully used Noon catalog API, found ${apiResponse.data.hits.length} products`);
           return this.parseJsonSearchResults(apiResponse.data, query);
         }
-      } catch (apiError) {
-        console.log('Noon API search failed, falling back to HTML scraping');
+      } catch (error) {
+        const catalogApiError = error as Error;
+        console.log('Noon catalog API search failed:', catalogApiError.message);
+        
+        // Second, try to use the autocomplete API as fallback
+        try {
+          const autoCompleteUrl = `${this.baseUrl}/egypt-ar/searchapi/v3/autocomplete/?q=${encodedQuery}&lang=ar`;
+          console.log(`Falling back to Noon autocomplete API: ${autoCompleteUrl}`);
+          
+          const apiResponse = await axios.get(autoCompleteUrl, {
+            headers: {
+              ...this.headers,
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+              'Referer': 'https://www.noon.com/egypt-ar/',
+              'X-Locale': 'ar-eg',
+              'X-Platform': 'web'
+            },
+            timeout: 10000
+          });
+          
+          if (apiResponse.status === 200 && apiResponse.data && apiResponse.data.hits) {
+            console.log(`Successfully used Noon autocomplete API, found ${apiResponse.data.hits.length} products`);
+            return this.parseJsonSearchResults(apiResponse.data, query);
+          }
+        } catch (apiError) {
+          console.log('Noon autocomplete API search failed, falling back to HTML scraping');
+        }
       }
       
       // Next, try a different API endpoint that might work
